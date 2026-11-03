@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>DropBridge</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <main id="login" class="login" hidden>
+    <form id="loginForm" class="card login-card" autocomplete="off">
+      <h1>DropBridge</h1>
+      <p class="muted">Masukkan PIN yang tampil di layar PC.</p>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" aria-label="PIN" required>
+      <button class="btn primary" type="submit">Masuk</button>
+      <p id="loginError" class="error" role="alert"></p>
+      <div class="addr" data-addr hidden></div>
+    </form>
+  </main>
+
+  <div id="app" class="wrap" hidden>
+    <header class="top">
+      <div class="brand"><span id="dot" class="dot" title="Terhubung"></span>DropBridge</div>
+      <button id="logout" class="btn ghost small" type="button">Keluar</button>
+    </header>
+
+    <div class="card addr-card" data-addr hidden></div>
+
+    <section class="card send">
+      <label for="folderInput" class="lbl">Kirim ke folder</label>
+      <div class="combo">
+        <input id="folderInput" type="text" placeholder="Ketik nama folder, mis. 27 012345" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+        <ul id="suggest" class="suggest" hidden></ul>
+      </div>
+      <p id="folderHint" class="hint"></p>
+      <div id="recent" class="chips" aria-label="Folder terbaru"></div>
+      <div class="send-actions">
+        <button id="pick" class="btn primary" type="button">Pilih file</button>
+        <input id="picker" type="file" multiple hidden>
+        <span class="muted small">Di PC: seret file ke halaman, atau tempel gambar dengan Ctrl+V.</span>
+      </div>
+    </section>
+    <ul id="uploads" class="uploads"></ul>
+
+    <nav class="tabs" role="tablist" aria-label="Bagian">
+      <button role="tab" type="button" data-tab="files" aria-selected="true">Folder <span id="folderCount" class="pill"></span></button>
+      <button role="tab" type="button" data-tab="text" aria-selected="false">Teks</button>
+    </nav>
+
+    <div class="cols">
+      <section class="card panel active" data-panel="files">
+        <div id="homeView">
+          <div class="panel-head">
+            <h2>Folder</h2>
+            <input id="search" type="search" placeholder="Cari folder" aria-label="Cari folder">
+          </div>
+          <ul id="folderList" class="flist"></ul>
+        </div>
+
+        <div id="folderView" hidden>
+          <div class="fv-head">
+            <a class="btn ghost small" href="#/">&lsaquo; Semua folder</a>
+            <div class="fv-title">
+              <h2 id="fvTitle"></h2>
+              <span id="fvMeta" class="muted small"></span>
+            </div>
+            <div class="fv-actions">
+              <a id="fvZip" class="btn small primary" href="#" download>Unduh ZIP</a>
+              <button id="fvRename" class="btn small" type="button">Ganti nama</button>
+              <button id="fvDelete" class="btn small danger" type="button">Hapus folder</button>
+            </div>
+          </div>
+          <div id="grid" class="grid"></div>
+        </div>
+      </section>
+
+      <section class="card panel" data-panel="text">
+        <div class="panel-head"><h2>Teks dan link</h2></div>
+        <form id="clipForm" class="clip-form">
+          <textarea id="clipText" rows="3" placeholder="Tulis atau tempel teks/link, lalu kirim. Ctrl+Enter untuk kirim cepat."></textarea>
+          <button id="clipSend" class="btn primary" type="submit">Kirim</button>
+        </form>
+        <ul id="clipList" class="clips"></ul>
+      </section>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay" hidden><span>Lepaskan file untuk mengunggah</span></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <dialog id="preview">
+    <div class="pv-head">
+      <span id="previewTitle"></span>
+      <div class="pv-nav">
+        <button id="pvPrev" class="btn small" type="button" aria-label="Sebelumnya">&lsaquo;</button>
+        <button id="pvNext" class="btn small" type="button" aria-label="Berikutnya">&rsaquo;</button>
+        <button id="previewClose" class="btn ghost small" type="button">Tutup</button>
+      </div>
+    </div>
+    <div id="previewBody" class="pv-body"></div>
+  </dialog>
+
+  <dialog id="moveDlg" class="small-dlg">
+    <form id="moveForm" class="dlg-body" autocomplete="off">
+      <h3>Pindahkan file</h3>
+      <p id="moveName" class="muted"></p>
+      <label for="moveInput" class="lbl">Ke folder</label>
+      <div class="combo">
+        <input id="moveInput" type="text" placeholder="Nama folder tujuan" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <ul id="moveSuggest" class="suggest" hidden></ul>
+      </div>
+      <p id="moveHint" class="hint"></p>
+      <div class="dlg-actions">
+        <button id="moveCancel" class="btn ghost" type="button">Batal</button>
+        <button class="btn primary" type="submit">Pindahkan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

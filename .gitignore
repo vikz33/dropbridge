@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Data pribadi (jangan diunggah)
+shared/
+data/
+config.json
+_dropbridge/
+
+# Android
+android/.gradle/
+android/build_log.txt
+android/local.properties
+android/**/build/
+*.apk
+
+# Lain-lain
+*.log
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
