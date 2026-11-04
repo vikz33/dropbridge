@@ -83,9 +83,9 @@ object Queue {
     }
 
     /** Salin satu file ke antrean. Mengembalikan null jika gagal dibaca. */
-    fun add(c: Context, uri: Uri, folder: String): Item? {
+    fun add(c: Context, uri: Uri, folder: String, shrink: Boolean = true): Item? {
         try {
-            val name = queryName(c, uri)
+            var name = queryName(c, uri)
             var modified = queryLong(c, uri, "datetaken")
             if (modified <= 0) modified = queryLong(c, uri, "last_modified")
             if (modified <= 0) {
@@ -108,6 +108,10 @@ object Queue {
                         size += n
                     }
                 }
+            }
+            if (shrink && size > ImageShrink.MAX_BYTES && ImageShrink.isImageName(name) && ImageShrink.shrink(dest)) {
+                size = dest.length()
+                name = ImageShrink.jpgName(name)
             }
             val item = Item(id, dest.absolutePath, name, folder, modified, size)
             synchronized(lock) {

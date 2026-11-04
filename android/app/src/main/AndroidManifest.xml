@@ -49,6 +49,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".MoreActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".HostActivity"
             android:exported="false" />
 
@@ -70,5 +74,10 @@
             android:name=".UploadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".AutoSendJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>

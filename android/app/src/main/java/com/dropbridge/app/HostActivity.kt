@@ -84,7 +84,7 @@ class HostActivity : Activity() {
         }, Ui.lp(c, 0, Ui.WRAP, r = 6, weight = 1f))
         bar.addView(toggle, Ui.lp(c, 0, Ui.WRAP, l = 6, weight = 1f))
 
-        val s = Ui.screen(this, "Mode host", "iPhone atau HP lain cukup buka browser", back = true, bottom = bar)
+        val s = Ui.screen(this, "Mode host", "iPhone atau HP lain cukup buka browser", back = false, bottom = bar, nav = Ui.TAB_HOST)
         val col = s.content
 
         col.addView(Ui.text(c, "1) Nyalakan hotspot di HP ini (atau pakai Wi-Fi yang sama). 2) Mulai host. 3) Di perangkat lain: scan QR, atau buka alamat lalu ketik kode.", 13f, false, Ui.MUTED), Ui.lp(c, b = 12))
@@ -123,6 +123,10 @@ class HostActivity : Activity() {
         addrBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         addrCard.addView(addrBox, Ui.lp(c, t = 4))
         col.addView(addrCard, Ui.lp(c, t = 12))
+
+        col.addView(Ui.button(c, "Terima otomatis dari HP host lain", Ui.Kind.OUTLINE, 48) {
+            startActivity(Intent(this, ReceiveActivity::class.java))
+        }, Ui.lp(c, t = 12))
 
         val statCard = Ui.card(c, Ui.WHITE, 14)
         statView = Ui.text(c, "", 14f, true)

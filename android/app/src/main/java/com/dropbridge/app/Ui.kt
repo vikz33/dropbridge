@@ -36,6 +36,8 @@ object Icon {
     const val FILE = 8
     const val BOX = 9
     const val WARN = 10
+    const val MENU = 11
+    const val LOGO = 12
 }
 
 class IconView(ctx: Context, private val kind: Int, private val color: Int, private val sizeDp: Int = 24, private val sw: Float = 1.9f) : View(ctx) {
@@ -106,6 +108,18 @@ class IconView(ctx: Context, private val kind: Int, private val color: Int, priv
                 poly(c, false, 5f, 8f, 12f, 12f, 19f, 8f)
                 poly(c, false, 12f, 12f, 12f, 20f)
             }
+            Icon.LOGO -> {
+                poly(c, false, 8.25f, 13.5f, 8.25f, 5.25f)
+                poly(c, false, 5.6f, 7.9f, 8.25f, 5.25f, 10.9f, 7.9f)
+                poly(c, false, 15.75f, 5.25f, 15.75f, 13.5f)
+                poly(c, false, 13.1f, 10.9f, 15.75f, 13.5f, 18.4f, 10.9f)
+                poly(c, false, 3f, 18.75f, 21f, 18.75f)
+            }
+            Icon.MENU -> {
+                poly(c, false, 4f, 7f, 20f, 7f)
+                poly(c, false, 4f, 12f, 20f, 12f)
+                poly(c, false, 4f, 17f, 20f, 17f)
+            }
             Icon.WARN -> {
                 poly(c, true, 12f, 3f, 22f, 20f, 2f, 20f)
                 poly(c, false, 12f, 10f, 12f, 15f)
@@ -121,6 +135,29 @@ class UiButton(ctx: Context) : Button(ctx) {
     override fun setEnabled(enabled: Boolean) {
         super.setEnabled(enabled)
         alpha = if (enabled) 1f else 0.5f
+    }
+}
+
+/** Bilah kemajuan bulat. */
+class BarView(ctx: Context) : View(ctx) {
+    var fraction = 0f
+        set(v) { field = v.coerceIn(0f, 1f); invalidate() }
+    var fillColor = Ui.ACCENT
+    var trackColor = Color.argb(46, 255, 255, 255)
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    override fun onMeasure(w: Int, h: Int) {
+        setMeasuredDimension(MeasureSpec.getSize(w), (8 * resources.displayMetrics.density).toInt())
+    }
+
+    override fun onDraw(c: Canvas) {
+        val r = height / 2f
+        p.color = trackColor
+        c.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), r, r, p)
+        if (fraction > 0f) {
+            p.color = fillColor
+            c.drawRoundRect(RectF(0f, 0f, maxOf(height.toFloat(), width * fraction), height.toFloat()), r, r, p)
+        }
     }
 }
 
@@ -273,7 +310,7 @@ object Ui {
         }
 
     /** Kerangka layar: kepala (tombol kembali atau logo + judul), isi yang bisa digulir, bilah bawah opsional. */
-    fun screen(a: Activity, title: String, subtitle: String? = null, back: Boolean = true, bottom: View? = null): Screen {
+    fun screen(a: Activity, title: String, subtitle: String? = null, back: Boolean = true, bottom: View? = null, nav: Int = -1): Screen {
         val root = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(GROUND)
@@ -295,7 +332,7 @@ object Ui {
         } else {
             val logo = FrameLayout(a).apply {
                 background = rounded(a, ACCENT, 11)
-                addView(IconView(a, Icon.UP, WHITE, 20, 2.4f), FrameLayout.LayoutParams(dp(a, 20), dp(a, 20), Gravity.CENTER))
+                addView(IconView(a, Icon.LOGO, WHITE, 24, 2.0f), FrameLayout.LayoutParams(dp(a, 24), dp(a, 24), Gravity.CENTER))
             }
             head.addView(logo, LinearLayout.LayoutParams(dp(a, 36), dp(a, 36)).apply { rightMargin = dp(a, 10) })
         }
@@ -320,9 +357,66 @@ object Ui {
             bottom.setPadding(dp(a, 20), dp(a, 12), dp(a, 20), dp(a, 16))
             root.addView(bottom, LinearLayout.LayoutParams(MATCH, WRAP))
         }
+        if (nav >= 0) {
+            root.addView(View(a).apply { setBackgroundColor(LINE) }, LinearLayout.LayoutParams(MATCH, dp(a, 1)))
+            root.addView(bottomNav(a, nav), LinearLayout.LayoutParams(MATCH, WRAP))
+        }
         systemBars(a)
         a.setContentView(root)
         return Screen(root, content, t, st)
+    }
+
+    const val TAB_SEND = 0
+    const val TAB_HOST = 1
+    const val TAB_FILES = 2
+    const val TAB_MORE = 3
+
+    private fun tabClass(tab: Int): Class<out Activity> = when (tab) {
+        TAB_HOST -> HostActivity::class.java
+        TAB_FILES -> BrowseActivity::class.java
+        TAB_MORE -> MoreActivity::class.java
+        else -> MainActivity::class.java
+    }
+
+    /** Pindah antar tab utama. Kirim adalah dasar tumpukan; tab lain saling menggantikan. */
+    fun goTab(a: Activity, tab: Int) {
+        val i = android.content.Intent(a, tabClass(tab)).addFlags(android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        if (tab == TAB_SEND) i.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        a.startActivity(i)
+        if (tab != TAB_SEND && a !is MainActivity) a.finish()
+        @Suppress("DEPRECATION")
+        a.overridePendingTransition(0, 0)
+    }
+
+    /** Menu bawah: Kirim, Terima, Folder, Lainnya. */
+    fun bottomNav(a: Activity, active: Int): View {
+        val row = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(WHITE)
+        }
+        val items = listOf(
+            Triple("Kirim", Icon.UP, TAB_SEND),
+            Triple("Terima", Icon.DOWN, TAB_HOST),
+            Triple("Folder", Icon.FOLDER, TAB_FILES),
+            Triple("Lainnya", Icon.MENU, TAB_MORE),
+        )
+        for ((label, icon, tab) in items) {
+            val on = tab == active
+            val col = LinearLayout(a).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                contentDescription = label
+                minimumHeight = dp(a, 64)
+                background = RippleDrawable(ColorStateList.valueOf(Color.argb(30, 0, 0, 0)), null, null)
+                setOnClickListener { if (!on) goTab(a, tab) }
+            }
+            col.addView(IconView(a, icon, if (on) ACCENT else MUTED, 24, if (on) 2.3f else 1.9f))
+            col.addView(text(a, label, 12f, on, if (on) ACCENT else MUTED), lp(a, WRAP, WRAP, t = 4))
+            row.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
+        }
+        return row
     }
 
     @Suppress("DEPRECATION")

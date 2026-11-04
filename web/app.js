@@ -180,20 +180,38 @@
     foldersSig = filesSig = clipsSig = '';
     applyRoute();
     refresh();
+    checkName();
     clearInterval(timer);
     timer = setInterval(() => { if (!document.hidden) refresh(); }, 4000);
   }
 
+  let qrIdx = 0;
+  let photoMaxKB = 512;
+  let localName = '';
+
   function renderAddr() {
     for (const box of $$('[data-addr]')) {
       box.replaceChildren();
-      if (!isOnPc || !urls.length) { box.hidden = true; continue; }
+      if (!urls.length || (!isOnPc && box.closest('#login'))) { box.hidden = true; continue; }
       box.hidden = false;
+      const img = el('img', {
+        class: 'addr-qr', width: 168, height: 168,
+        alt: 'Kode QR untuk membuka DropBridge dari HP',
+        src: '/api/qr?pin=1&i=' + qrIdx + '&t=' + Date.now(),
+      });
+      const qrBox = el('div', { class: 'addr-qrbox' }, img,
+        el('div', { class: 'addr-qrcap', text: 'Scan dengan kamera HP: langsung terbuka dan masuk, tanpa mengetik PIN.' }));
+      img.addEventListener('error', () => { qrBox.hidden = true; });
       box.append(
-        el('div', { class: 'addr-title', text: 'Buka salah satu alamat ini di browser HP (ketuk untuk menyalin):' }),
-        el('div', { class: 'addr-list' },
-          urls.map((u) => el('button', { type: 'button', text: u, onclick: async () => toast((await copyText(u)) ? 'Alamat disalin' : 'Gagal menyalin') })))
-      );
+        el('div', { class: 'addr-wrap' },
+          qrBox,
+          el('div', { class: 'addr-side' },
+            el('div', { class: 'addr-title', text: 'Atau ketik alamat ini di browser HP (ketuk untuk menyalin dan memilih QR):' }),
+            el('div', { class: 'addr-list' },
+              urls.map((u, idx) => el('button', {
+                type: 'button', text: u, 'aria-pressed': idx === qrIdx ? 'true' : 'false',
+                onclick: async () => { qrIdx = idx; renderAddr(); toast((await copyText(u)) ? 'Alamat disalin' : 'Gagal menyalin'); },
+              }))))));
     }
   }
 
@@ -202,7 +220,13 @@
       const r = await fetch('/api/info');
       const d = await r.json();
       urls = d.urls || [];
+      localName = d.local_name || '';
       maxMB = d.max_upload_mb || maxMB;
+      if (typeof d.photo_max_kb === 'number') photoMaxKB = d.photo_max_kb;
+      $('#shrinkKB').textContent = photoMaxKB;
+      for (const e of $$('.shrinkKB2')) e.textContent = photoMaxKB;
+      for (const e of $$('.shrink-opt')) e.hidden = photoMaxKB <= 0;
+      $('#shrinkPhotos2').closest('.mrow').hidden = photoMaxKB <= 0;
       renderAddr();
     } catch { /* tidak kritis */ }
   }
@@ -290,12 +314,6 @@
     sendCombo.updateHint();
   }
 
-  function renderRecent() {
-    const box = $('#recent');
-    box.replaceChildren(...folders.slice(0, 5).map((f) =>
-      el('button', { type: 'button', class: 'chip', text: f.name, title: f.name, onclick: () => { setTarget(f.name); store.set('db_target', f.name); } })));
-  }
-
   // ---------- Rute ----------
   function parseHash() {
     const h = location.hash;
@@ -303,21 +321,33 @@
     if (h.startsWith('#/f/')) {
       try { return { type: 'folder', name: decodeURIComponent(h.slice(4)) }; } catch { /* jatuh ke beranda */ }
     }
-    return { type: 'home', name: '' };
+    if (h === '#/folders') return { type: 'home', name: '' };
+    if (h === '#/lainnya') return { type: 'more', name: '' };
+    return { type: 'send', name: '' };
   }
+
+  const inFolder = () => route.type === 'folder' || route.type === 'root';
 
   function applyRoute() {
     route = parseHash();
     files = [];
     filesSig = '';
     const home = route.type === 'home';
+    const page = route.type === 'send' ? 'send' : route.type === 'more' ? 'more' : 'folders';
+    $('#pageSend').hidden = page !== 'send';
+    $('#pageFolders').hidden = page !== 'folders';
+    $('#pageMore').hidden = page !== 'more';
+    for (const a of $$('.mainnav a')) {
+      if (a.dataset.nav === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    }
     $('#homeView').hidden = !home;
-    $('#folderView').hidden = home;
+    $('#folderView').hidden = !inFolder();
+    window.scrollTo(0, 0);
     if (route.type === 'folder') {
       setTarget(route.name);
       store.set('db_target', route.name);
     }
-    if (!home) {
+    if (inFolder()) {
       const root = route.type === 'root';
       $('#fvTitle').textContent = root ? 'Tanpa folder' : route.name;
       $('#fvMeta').textContent = '';
@@ -326,10 +356,12 @@
       $('#fvDelete').hidden = root;
       if (!root) $('#fvZip').href = '/api/folders/' + enc(route.name) + '/zip';
       $('#grid').replaceChildren();
-      $$('.tabs button')[0].click();
       loadFiles().catch(() => {});
-    } else {
+    } else if (home) {
       renderHome();
+    } else if (route.type === 'more') {
+      $('#myName').textContent = myName || 'Belum diberi nama';
+      renderDevices();
     }
   }
 
@@ -345,9 +377,11 @@
     rootInfo = d.root || rootInfo;
     if (sig !== foldersSig) {
       foldersSig = sig;
-      $('#folderCount').textContent = folders.length || '';
-      renderRecent();
+      $('#folderCount').textContent = '';
+      $('#allCount').textContent = folders.length || '';
+      if ($('#allDlg').open) renderAll();
       sendCombo.updateHint();
+      renderChips();
       if (route.type === 'home') renderHome();
     }
   }
@@ -362,24 +396,85 @@
         el('span', { class: 'chev', text: '›' })));
   }
 
-  function renderHome() {
-    const list = $('#folderList');
-    list.replaceChildren();
-    const q = $('#search').value.trim().toLowerCase();
-    const shown = folders.filter((f) => !q || f.name.toLowerCase().includes(q));
-    for (const f of shown) list.append(folderRow('#/f/' + enc(f.name), f.name, f.count, f.size, f.modified));
-    if (!q && rootInfo.count > 0) list.append(folderRow('#/root', 'Tanpa folder', rootInfo.count, rootInfo.size, rootInfo.modified));
-    if (!list.children.length) {
-      list.append(el('li', { class: 'empty', text: q
-        ? 'Tidak ada folder yang cocok.'
-        : 'Belum ada folder. Ketik nama folder di atas, lalu pilih file untuk dikirim.' }));
+  const RECENT_CHIPS = 3;
+
+  function renderChips() {
+    const box = $('#recentChips');
+    box.replaceChildren();
+    const recent = folders.slice(0, RECENT_CHIPS);
+    box.hidden = !recent.length;
+    if (!recent.length) return;
+    box.append(el('span', { class: 'chips-label', text: 'Terakhir:' }));
+    for (const f of recent) {
+      box.append(el('button', {
+        type: 'button', class: 'chip', text: f.name, title: f.name,
+        onclick: () => { setTarget(f.name); store.set('db_target', f.name); },
+      }));
     }
   }
-  $('#search').addEventListener('input', renderHome);
+
+  function renderHome() {
+    const list = $('#folderList');
+    const q = $('#fSearch').value.trim().toLowerCase();
+    list.replaceChildren();
+    for (const f of folders.filter((x) => !q || x.name.toLowerCase().includes(q))) {
+      list.append(folderRow('#/f/' + enc(f.name), f.name, f.count, f.size, f.modified));
+    }
+    if (rootInfo.count > 0 && (!q || 'tanpa folder'.includes(q))) {
+      list.append(folderRow('#/root', 'Tanpa folder', rootInfo.count, rootInfo.size, rootInfo.modified));
+    }
+    if (!list.children.length) {
+      list.append(el('li', { class: 'empty', text: q ? 'Tidak ada folder yang cocok.' : 'Belum ada folder. Kirim file ke sebuah nama folder dan folder itu akan dibuat otomatis.' }));
+    }
+  }
+  $('#fSearch').addEventListener('input', renderHome);
+
+  // ---------- Semua folder (cari dan pilih tujuan) ----------
+  function renderAll() {
+    const list = $('#allList');
+    const q = $('#allSearch').value.trim().toLowerCase();
+    list.replaceChildren();
+    const shown = folders.filter((f) => !q || f.name.toLowerCase().includes(q));
+    for (const f of shown) {
+      list.append(el('li', { class: 'frow pick-row' },
+        el('a', { class: 'frow-main', href: '#/f/' + enc(f.name), onclick: () => $('#allDlg').close() },
+          el('div', { class: 'ext', 'data-kind': 'folder' }),
+          el('div', { class: 'meta' },
+            el('div', { class: 'name', text: f.name, title: f.name }),
+            el('div', { class: 'sub', text: `${f.count} file · ${fmtSize(f.size)}` + (f.modified ? ' · ' + fmtTime(f.modified) : '') }))),
+        el('button', {
+          type: 'button', class: 'btn small', text: 'Kirim ke sini', title: 'Jadikan folder tujuan kiriman',
+          onclick: () => { setTarget(f.name); store.set('db_target', f.name); $('#allDlg').close(); toast('Tujuan: ' + f.name); },
+        })));
+    }
+    if (!list.children.length) list.append(el('li', { class: 'empty', text: q ? 'Tidak ada folder yang cocok.' : 'Belum ada folder.' }));
+  }
+
+  let allView = store.get('db_allview') === 'grid' ? 'grid' : 'list';
+  function applyAllView() {
+    $('#allList').classList.toggle('grid-view', allView === 'grid');
+    $('#folderList').classList.toggle('grid-view', allView === 'grid');
+    for (const id of ['#viewList', '#fgList']) $(id).setAttribute('aria-pressed', allView === 'list');
+    for (const id of ['#viewGrid', '#fgGrid']) $(id).setAttribute('aria-pressed', allView === 'grid');
+  }
+  for (const id of ['#viewList', '#fgList']) $(id).addEventListener('click', () => { allView = 'list'; store.set('db_allview', allView); applyAllView(); });
+  for (const id of ['#viewGrid', '#fgGrid']) $(id).addEventListener('click', () => { allView = 'grid'; store.set('db_allview', allView); applyAllView(); });
+  applyAllView();
+
+  function openAll() {
+    applyAllView();
+    $('#allSearch').value = '';
+    renderAll();
+    $('#allDlg').showModal();
+    $('#allSearch').focus();
+  }
+  $('#allBtn').addEventListener('click', openAll);
+  $('#allClose').addEventListener('click', () => $('#allDlg').close());
+  $('#allSearch').addEventListener('input', renderAll);
 
   // ---------- Isi folder ----------
   async function loadFiles() {
-    if (route.type === 'home') return;
+    if (!inFolder()) return;
     const asked = route;
     let d;
     try {
@@ -387,7 +482,7 @@
     } catch (e) {
       if (e.status === 404 && asked === route) {
         toast('Folder tidak ditemukan', 'err');
-        location.hash = '#/';
+        location.hash = '#/folders';
         return;
       }
       throw e;
@@ -469,7 +564,7 @@
         if ($('#folderInput').value === name) setTarget('');
         if (store.get('db_target') === name) store.set('db_target', '');
         toast('Folder dihapus');
-        location.hash = '#/';
+        location.hash = '#/folders';
         loadFolders().catch(() => {});
         return;
       } catch (e) {
@@ -576,35 +671,83 @@
   }
 
   // Mengembalikan false bila nama folder belum diisi.
-  function enqueue(list) {
+  let pendingRoot = null;
+  $('#rootFill').addEventListener('click', () => { pendingRoot = null; $('#rootDlg').close(); $('#folderInput').focus(); });
+  $('#rootGo').addEventListener('click', () => {
+    const arr = pendingRoot;
+    pendingRoot = null;
+    $('#rootDlg').close();
+    if (arr) enqueue(arr, '');
+  });
+
+  // folderOverride: '' = tanpa folder (langsung di folder shared).
+  function enqueue(list, folderOverride) {
     const arr = Array.from(list);
     if (!arr.length) return false;
-    const folder = targetFolder();
-    if (!folder) {
-      toast('Isi nama folder tujuan dulu', 'err');
-      $('#folderInput').focus();
+    const folder = folderOverride === undefined ? targetFolder() : folderOverride;
+    if (folder === null) {
+      pendingRoot = arr;
+      $('#rootDlg').showModal();
       return false;
     }
+    const where = folder || 'Tanpa folder';
     for (const file of arr) {
       const row = el('li', { class: 'up' },
         el('div', { class: 'up-name', text: file.name, title: file.name }),
-        el('div', { class: 'up-state', text: `Menunggu → ${folder}` }),
+        el('div', { class: 'up-state', text: `Menunggu → ${where}` }),
         el('div', { class: 'bar' }, el('i')));
       $('#uploads').prepend(row);
+      $('#upCard').hidden = false;
       if (file.size > maxMB * 1024 * 1024) {
         fail(row, `Terlalu besar (maks ${maxMB} MB)`);
         continue;
       }
-      queue.push({ file, row, folder });
+      queue.push({ file, row, folder, shrink: $('#shrinkPhotos').checked });
     }
     runQueue();
     return true;
   }
 
+  // ---------- Kecilkan foto > batas (default 512 KB) ----------
+  const SHRINKABLE = /^image\/(jpeg|png|webp)$/;
+
+  async function shrinkImage(file, maxBytes) {
+    let bmp;
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch { return file; } // format tidak bisa dibaca browser: kirim apa adanya
+    const encode = (w, h, q) => new Promise((res) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); // PNG transparan -> latar putih
+      g.drawImage(bmp, 0, 0, w, h);
+      c.toBlob((b) => res(b), 'image/jpeg', q);
+    });
+    let scale = Math.min(1, 2048 / Math.max(bmp.width, bmp.height));
+    let best = null;
+    for (let round = 0; round < 12; round++) {
+      const w = Math.max(1, Math.round(bmp.width * scale));
+      const h = Math.max(1, Math.round(bmp.height * scale));
+      for (const q of [0.85, 0.75, 0.65]) {
+        const b = await encode(w, h, q);
+        if (!b) continue;
+        best = b;
+        if (b.size <= maxBytes) { round = 99; break; }
+      }
+      if (round === 99) break;
+      if (Math.max(w, h) <= 640) break;
+      scale *= 0.85;
+    }
+    bmp.close && bmp.close();
+    if (!best || best.size >= file.size) return file;
+    const name = /\.jpe?g$/i.test(file.name) ? file.name : file.name.replace(/\.[^.]+$/, '') + '.jpg';
+    return new File([best], name, { type: 'image/jpeg', lastModified: file.lastModified || Date.now() });
+  }
+
   function fail(row, msg) {
     row.classList.add('err');
     $('.up-state', row).textContent = msg + ' (ketuk untuk menutup)';
-    row.addEventListener('click', () => row.remove(), { once: true });
+    row.addEventListener('click', () => { row.remove(); syncUpCard(); }, { once: true });
   }
 
   async function runQueue() {
@@ -618,7 +761,28 @@
     if (loggedIn) refresh();
   }
 
-  function uploadOne({ file, row, folder }) {
+  function fmtSpeed(bps) {
+    return bps >= 1048576 ? (bps / 1048576).toFixed(1).replace('.', ',') + ' MB/s' : Math.round(bps / 1024) + ' KB/s';
+  }
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.round(sec));
+    return sec < 60 ? sec + ' dtk' : Math.floor(sec / 60) + ' mnt ' + (sec % 60) + ' dtk';
+  }
+
+  async function uploadOne(job) {
+    let { file } = job;
+    const { row } = job;
+    if (photoMaxKB > 0 && job.shrink && SHRINKABLE.test(file.type) && file.size > photoMaxKB * 1024) {
+      $('.up-state', row).textContent = `Mengecilkan foto (${fmtSize(file.size)}) agar di bawah ${photoMaxKB} KB...`;
+      try {
+        const small = await shrinkImage(file, photoMaxKB * 1024);
+        if (small !== file) { file = small; $('.up-name', row).textContent = small.name; }
+      } catch { /* kirim asli */ }
+    }
+    return sendFile(file, row, job.folder);
+  }
+
+  function sendFile(file, row, folder) {
     return new Promise((resolve) => {
       const state = $('.up-state', row);
       const bar = $('.bar i', row);
@@ -629,13 +793,20 @@
       xhr.open('POST', q);
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       const t0 = performance.now();
-      let tSent = 0;
+      let tSent = 0, lastT = 0, lastB = 0, speed = 0;
       xhr.upload.onload = () => { tSent = performance.now(); state.textContent = 'Terkirim, menunggu PC menyimpan...'; };
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable || tSent) return;
         const pct = Math.round((e.loaded / e.total) * 100);
         bar.style.width = pct + '%';
-        state.textContent = `${pct}% · ${fmtSize(e.loaded)} / ${fmtSize(e.total)}`;
+        const nowT = performance.now();
+        if (lastT && nowT - lastT >= 500) {
+          const inst = ((e.loaded - lastB) * 1000) / (nowT - lastT);
+          speed = speed ? speed * 0.6 + inst * 0.4 : inst;
+          lastT = nowT; lastB = e.loaded;
+        } else if (!lastT) { lastT = nowT; lastB = e.loaded; }
+        const eta = speed > 1024 ? ` · sisa ${fmtDur((e.total - e.loaded) / speed)}` : '';
+        state.textContent = `${pct}% · ${fmtSize(e.loaded)} / ${fmtSize(e.total)}` + (speed ? ` · ${fmtSpeed(speed)}` : '') + eta;
       };
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -648,15 +819,15 @@
             row.classList.add('done');
             const now = performance.now();
             const sec = (ms) => (ms / 1000).toFixed(1) + ' dtk';
-            state.textContent = `Selesai · ${fmtSize(file.size)} → ${real} · kirim ${sec((tSent || now) - t0)}, tunggu ${sec(tSent ? now - tSent : 0)}` + (typeof d.took === 'number' ? `, PC simpan ${d.took.toFixed(2)} dtk` : '');
-            setTimeout(() => row.remove(), 15000);
-            store.set('db_target', real);
-            if ($('#folderInput').value.trim() && cleanFolder($('#folderInput').value).toLowerCase() === folder.toLowerCase()) {
+            state.textContent = `Selesai · ${fmtSize(file.size)} → ${real || 'Tanpa folder'}${tSent && tSent > t0 ? ' · rata-rata ' + fmtSpeed(file.size * 1000 / (tSent - t0)) : ''} · kirim ${sec((tSent || now) - t0)}, tunggu ${sec(tSent ? now - tSent : 0)}` + (typeof d.took === 'number' ? `, PC simpan ${d.took.toFixed(2)} dtk` : '');
+            setTimeout(() => { row.remove(); syncUpCard(); }, 15000);
+            if (real) store.set('db_target', real);
+            if (real && $('#folderInput').value.trim() && cleanFolder($('#folderInput').value).toLowerCase() === folder.toLowerCase()) {
               $('#folderInput').value = real; // pakai nama final dari server
             }
           }
           if (loggedIn) loadFolders().then(() => { sendCombo.updateHint(); }).catch(() => {});
-          if (loggedIn && route.type !== 'home') loadFiles().catch(() => {});
+          if (loggedIn && inFolder()) loadFiles().catch(() => {});
         } else if (xhr.status === 401) {
           showLogin();
           fail(row, 'Sesi berakhir');
@@ -764,19 +935,33 @@
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#clipSend').click(); }
   });
 
-  // ---------- Tab ----------
-  for (const btn of $$('.tabs button')) {
-    btn.addEventListener('click', () => {
-      for (const b of $$('.tabs button')) b.setAttribute('aria-selected', String(b === btn));
-      for (const p of $$('.panel')) p.classList.toggle('active', p.dataset.panel === btn.dataset.tab);
-    });
+  // ---------- Mode kirim: File / Teks ----------
+  function syncUpCard() {
+    $('#upCard').hidden = !$('#uploads').children.length || !!$('#sendFile').hidden;
   }
+  function setMode(m) {
+    $('#sendFile').hidden = m !== 'file';
+    $('#sendText').hidden = m !== 'text';
+    $('#modeFile').setAttribute('aria-pressed', m === 'file');
+    $('#modeText').setAttribute('aria-pressed', m === 'text');
+    $('#upCard').hidden = m !== 'file' || !$('#uploads').children.length;
+  }
+  $('#modeFile').addEventListener('click', () => setMode('file'));
+  $('#modeText').addEventListener('click', () => setMode('text'));
+
+  // ---------- Dialog Hubungkan HP ----------
+  const openConn = () => $('#connDlg').showModal();
+  $('#connBtn').addEventListener('click', openConn);
+  $('#connBtn2').addEventListener('click', openConn);
+  $('#connClose').addEventListener('click', () => $('#connDlg').close());
+  if (isOnPc) $('#connBtn').hidden = false;
 
   // ---------- Login / sesi ----------
   async function refresh() {
     try {
       const jobs = [loadFolders(), loadClips()];
-      if (route.type !== 'home') jobs.push(loadFiles());
+      if (inFolder()) jobs.push(loadFiles());
+      if (route.type === 'more') jobs.push(renderDevices());
       await Promise.all(jobs);
       setOnline(true);
     } catch (e) {
@@ -784,12 +969,100 @@
     }
   }
 
+  const shrinkBoxes = [$('#shrinkPhotos'), $('#shrinkPhotos2')];
+  for (const cb of shrinkBoxes) {
+    cb.checked = store.get('db_shrink') !== '0';
+    cb.addEventListener('change', (e) => {
+      store.set('db_shrink', e.target.checked ? '1' : '0');
+      for (const o of shrinkBoxes) o.checked = e.target.checked;
+    });
+  }
+
+  // ---------- Identitas perangkat ----------
+  let myName = '';
+
+  async function checkName() {
+    try {
+      const s = await api('/api/session');
+      myName = s.name || '';
+      $('#myName').textContent = myName || '-';
+      if (!myName) {
+        const saved = store.get('db_devname');
+        if (saved) { await api('/api/device', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ name: saved }) }); myName = saved; }
+        // tanpa nama pun boleh: perangkat tampil sebagai jenisnya (mis. Android). Nama bisa diisi dari Lainnya.
+      }
+      updateDevCount();
+    } catch { /* abaikan */ }
+  }
+
+  function openName() {
+    $('#nameInput').value = myName;
+    if (!$('#nameDlg').open) $('#nameDlg').showModal();
+    $('#nameInput').focus();
+  }
+
+  $('#nameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#nameInput').value.trim();
+    if (!name) return;
+    try {
+      const r = await api('/api/device', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ name }) });
+      myName = r.name;
+      store.set('db_devname', r.name);
+      $('#nameDlg').close();
+      $('#myName').textContent = myName;
+      if (route.type === 'more') renderDevices();
+    } catch (err) { toast(err.message, 'err'); }
+  });
+
+  const ago = (t) => {
+    const s = Math.max(0, Math.round(Date.now() / 1000 - t));
+    if (s < 60) return 'baru saja';
+    if (s < 3600) return Math.floor(s / 60) + ' menit lalu';
+    if (s < 86400) return Math.floor(s / 3600) + ' jam lalu';
+    return Math.floor(s / 86400) + ' hari lalu';
+  };
+
+  async function updateDevCount() {
+    try {
+      const d = await api('/api/devices');
+      $('#devCount').textContent = d.online + (d.online === 1 ? ' perangkat' : ' perangkat');
+    } catch { /* abaikan */ }
+  }
+
+  async function renderDevices() {
+    const box = $('#devList');
+    try {
+      const d = await api('/api/devices');
+      box.replaceChildren(...d.devices.map((v) => el('div', { class: 'dev-row' },
+        el('span', { class: 'dev-dot' + (v.online ? ' on' : ''), title: v.online ? 'Online' : 'Tidak aktif' }),
+        el('div', { class: 'dev-info' },
+          el('div', { class: 'dev-name', text: v.name + (v.current ? ' (perangkat ini)' : '') }),
+          el('div', { class: 'dev-sub muted', text: `${v.kind} · ${v.ip} · ${v.online ? 'online' : ago(v.last_seen)}` })),
+        v.current ? '' : el('button', {
+          class: 'btn ghost small danger', type: 'button', text: 'Keluarkan',
+          onclick: async () => {
+            try { await api('/api/devices/' + v.id, { method: 'DELETE' }); toast('Perangkat dikeluarkan'); renderDevices(); updateDevCount(); }
+            catch (err) { toast(err.message, 'err'); }
+          },
+        }))));
+    } catch (err) { box.textContent = err.message; }
+  }
+
+  $('#renameBtn').addEventListener('click', openName);
+  $('#devOthers').addEventListener('click', async () => {
+    if (!confirm('Keluarkan semua perangkat lain? Mereka harus memasukkan PIN lagi.')) return;
+    try { const r = await api('/api/devices/revoke-others', { method: 'POST' }); toast(r.revoked + ' perangkat dikeluarkan'); renderDevices(); updateDevCount(); }
+    catch (err) { toast(err.message, 'err'); }
+  });
+  setInterval(() => { if (loggedIn && !document.hidden) updateDevCount(); }, 20000);
+
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const pin = $('#pin').value.trim();
     if (!pin) return;
     try {
-      await api('/api/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ pin }) });
+      await api('/api/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ pin, name: store.get('db_devname') }) });
       $('#pin').value = '';
       showApp();
     } catch (err) {
@@ -809,6 +1082,16 @@
     const last = store.get('db_target');
     if (last) $('#folderInput').value = last;
     await loadInfo();
+    const qpin = new URLSearchParams(location.search).get('pin');
+    if (qpin) {
+      // Dibuka dari kode QR di PC: hapus PIN dari alamat, lalu masuk otomatis.
+      history.replaceState(null, '', location.pathname + location.hash);
+      try {
+        await api('/api/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ pin: qpin.trim(), name: store.get('db_devname') }) });
+        showApp();
+        return;
+      } catch { /* lanjut ke login biasa */ }
+    }
     try {
       const r = await fetch('/api/session', { credentials: 'same-origin' });
       if (r.ok) showApp(); else showLogin();

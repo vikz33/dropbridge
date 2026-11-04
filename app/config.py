@@ -1,5 +1,6 @@
 """Pengaturan DropBridge, dibaca dari config.json (dibuat otomatis jika belum ada)."""
 import json
+import re
 import secrets
 from pathlib import Path
 
@@ -13,6 +14,9 @@ DEFAULTS = {
     "shared_dir": "shared",  # relatif terhadap folder proyek, atau path absolut
     "max_upload_mb": 2048,
     "session_hours": 24,
+    "photo_max_kb": 512,  # foto lebih besar ini dikecilkan resolusinya di HP/web sebelum dikirim (0 = nonaktif)
+    "idle_hours": 8,  # perangkat lain otomatis keluar bila tidak aktif sekian jam (0 = nonaktif)
+    "mdns_name": "dropbridge",  # alamat tetap http://dropbridge.local:8000 (kosong = nonaktif)
     "lan_only": True,  # tolak koneksi dari luar jaringan lokal
     "enable_docs": False,  # true = buka dokumentasi API di /docs
 }
@@ -40,6 +44,9 @@ class Settings:
         self.max_upload_mb: int = int(cfg["max_upload_mb"])
         self.max_upload_bytes: int = self.max_upload_mb * 1024 * 1024
         self.session_hours: float = float(cfg["session_hours"])
+        self.photo_max_kb: int = int(cfg["photo_max_kb"])
+        self.idle_hours: float = float(cfg["idle_hours"])
+        self.mdns_name: str = re.sub(r"[^a-z0-9-]", "", str(cfg["mdns_name"]).strip().lower())
         self.lan_only: bool = bool(cfg["lan_only"])
         self.enable_docs: bool = bool(cfg["enable_docs"])
         self.data_dir: Path = BASE_DIR / "data"

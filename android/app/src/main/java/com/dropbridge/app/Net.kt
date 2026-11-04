@@ -30,10 +30,20 @@ object Net {
         if (d.isNotEmpty()) d else fallback
     } catch (e: Exception) { fallback }
 
+    private const val UA = "DropBridge-Android"
+
+    /** Nama perangkat untuk daftar di PC, mis. "HUAWEI VOG-L29". */
+    private fun deviceName(): String {
+        val m = android.os.Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercase() }
+        val model = android.os.Build.MODEL.orEmpty()
+        return if (model.startsWith(m, ignoreCase = true)) model else "$m $model".trim()
+    }
+
     private fun request(method: String, url: String, token: String?, body: String?, timeoutMs: Int): Pair<Int, String> {
         val c = URL(url).openConnection() as HttpURLConnection
         try {
             c.requestMethod = method
+            c.setRequestProperty("User-Agent", UA)
             c.connectTimeout = timeoutMs
             c.readTimeout = timeoutMs
             if (token != null) c.setRequestProperty("Authorization", "Bearer $token")
@@ -177,7 +187,7 @@ object Net {
         }
         val pin = Prefs.pin
         if (pin.isEmpty()) throw NetError(401, "Belum ada PIN. Isi PIN dari layar PC.")
-        val r = request("POST", "$base/api/login", null, JSONObject().put("pin", pin).toString(), 6000)
+        val r = request("POST", "$base/api/login", null, JSONObject().put("pin", pin).put("name", deviceName()).toString(), 6000)
         if (r.first == 200) {
             val t = JSONObject(r.second).optString("token", "")
             if (t.isNotEmpty()) {
@@ -218,6 +228,7 @@ object Net {
         val c = URL(url).openConnection() as HttpURLConnection
         try {
             c.requestMethod = "POST"
+            c.setRequestProperty("User-Agent", UA)
             c.doOutput = true
             c.connectTimeout = 5000
             c.readTimeout = 60000

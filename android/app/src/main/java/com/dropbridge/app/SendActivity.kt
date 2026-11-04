@@ -28,6 +28,7 @@ class SendActivity : Activity() {
     private lateinit var chipScroll: android.widget.HorizontalScrollView
     private lateinit var chipsTitle: TextView
     private lateinit var hint: TextView
+    private lateinit var shrinkSwitch: android.widget.Switch
     private lateinit var folderEdit: AutoCompleteTextView
     private lateinit var sendBtn: Button
     private lateinit var folderAdapter: ArrayAdapter<String>
@@ -118,6 +119,20 @@ class SendActivity : Activity() {
             visibility = View.GONE
         }
         col.addView(hint, Ui.lp(c, t = 10))
+
+        val shrinkCard = Ui.card(c, Ui.WHITE, 14)
+        val shrinkRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val shrinkTexts = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        shrinkTexts.addView(Ui.text(c, "Kecilkan foto (maks 512 KB)", 16f, true, Ui.INK))
+        shrinkTexts.addView(Ui.text(c, "Matikan untuk kirim resolusi penuh, mis. foto liburan.", 13f, false, Ui.MUTED))
+        shrinkRow.addView(shrinkTexts, LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        shrinkSwitch = android.widget.Switch(c).apply {
+            isChecked = Prefs.shrinkPhotos
+            setOnCheckedChangeListener { _, on -> Prefs.shrinkPhotos = on }
+        }
+        shrinkRow.addView(shrinkSwitch)
+        shrinkCard.addView(shrinkRow)
+        col.addView(shrinkCard, Ui.lp(c, t = 12))
 
         chipsTitle = Ui.caption(c, "Folder di PC")
         chipsTitle.visibility = View.GONE
@@ -294,25 +309,34 @@ class SendActivity : Activity() {
         }
 
         val folder = folderEdit.text.toString().trim()
+        if (uris.isEmpty()) return
         if (folder.isEmpty()) {
-            Toast.makeText(this, "Isi nama folder tujuan dulu", Toast.LENGTH_LONG).show()
-            folderEdit.requestFocus()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Folder tujuan belum diisi")
+                .setMessage("Kirim file ini ke \"Tanpa folder\" (langsung di folder shared di PC), atau isi nama folder dulu?")
+                .setPositiveButton("Kirim tanpa folder") { _, _ -> queueAndFinish("") }
+                .setNegativeButton("Isi folder dulu") { _, _ -> folderEdit.requestFocus() }
+                .show()
             return
         }
-        if (uris.isEmpty()) return
+        queueAndFinish(folder)
+    }
 
+    private fun queueAndFinish(folder: String) {
         sendBtn.isEnabled = false
         info2.text = "Menyalin file ke antrean..."
         val list = uris
         val app = applicationContext
+        val shrink = shrinkSwitch.isChecked
+        val label = if (folder.isEmpty()) "Tanpa folder" else "folder \"$folder\""
         Thread {
             var n = 0
-            for (u in list) if (Queue.add(app, u, folder) != null) n++
-            Prefs.lastFolder = folder
+            for (u in list) if (Queue.add(app, u, folder, shrink) != null) n++
+            if (folder.isNotEmpty()) Prefs.lastFolder = folder
             runOnUiThread {
                 if (n > 0) {
                     UploadService.start(app)
-                    Toast.makeText(this, "$n file masuk antrean, dikirim ke folder \"$folder\"", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "$n file masuk antrean, dikirim ke $label", Toast.LENGTH_LONG).show()
                 } else {
                     Toast.makeText(this, "File tidak bisa dibaca", Toast.LENGTH_LONG).show()
                 }

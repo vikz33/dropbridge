@@ -34,6 +34,15 @@ object Prefs {
         get() = get("lastFolder")
         set(v) = put("lastFolder", v)
 
+    /** Kirim antrean otomatis saat HP tersambung Wi-Fi (default aktif). */
+    var shrinkPhotos: Boolean
+        get() = sp?.getBoolean("shrinkPhotos", true) ?: true
+        set(v) { sp?.edit()?.putBoolean("shrinkPhotos", v)?.apply() }
+
+    var autoSend: Boolean
+        get() = sp?.getBoolean("autoSend", true) ?: true
+        set(v) { sp?.edit()?.putBoolean("autoSend", v)?.apply() }
+
     /** Daftar folder di PC (disimpan terakhir kali berhasil diambil) untuk saran nama. */
     var folders: List<String>
         get() = get("folders").split("\n").filter { it.isNotEmpty() }

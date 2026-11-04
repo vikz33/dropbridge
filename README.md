@@ -23,6 +23,8 @@ Pastikan juga Wi-Fi di PC bertipe **Private** (bukan Public).
 
 ## Fitur (v2)
 
+**Tampilan:** tiga halaman. **Kirim** (beranda bersih: File/Teks, folder tujuan, Pilih file), **Folder** (cari, daftar atau kotak, isi folder) dan **Lainnya** (perangkat terhubung, nama perangkat, kecilkan foto, keluar). Di PC menunya di atas dan ada tombol **Hubungkan HP** (QR); di HP menunya di bawah layar.
+
 - Login PIN (percobaan salah dibatasi: 5x, lalu kunci 60 detik)
 - **Folder per barang/dokumen**: nama folder bebas diketik pengguna (mis. `27 012345`). Satu level, isinya datar.
   Folder dibuat otomatis saat file pertama dikirim.
@@ -34,6 +36,9 @@ Pastikan juga Wi-Fi di PC bertipe **Private** (bukan Public).
 - Dari HP: ganti nama folder, hapus folder (dengan konfirmasi yang menyebut jumlah file), unduh folder sebagai ZIP.
 - Di PC: seret file ke halaman (masuk ke folder yang tertulis di kotak), atau tempel gambar dengan Ctrl+V.
 - Kirim teks atau link antar perangkat.
+- **Alamat tetap `dropbridge.local:8000`** (mDNS): tidak berubah walau IP PC berganti. Chrome di Android umumnya tidak bisa membuka alamat `.local`; di Android pairing pakai QR atau ketik IP.
+- **Identitas perangkat**: tiap perangkat diberi nama saat pertama masuk. Tombol **Perangkat** menampilkan siapa yang terhubung (nama, jenis, IP, aktif terakhir) dan bisa **Keluarkan** perangkat tak dikenal. Perangkat lain otomatis keluar setelah 8 jam tidak aktif (PC sendiri dikecualikan).
+- **Foto otomatis dikecilkan**: foto JPG/PNG/WebP di atas 512 KB dikecilkan resolusi dan kualitasnya sebelum dikirim (di web dan aplikasi Android), hasilnya JPG di bawah 512 KB. Foto yang sudah kecil tidak diubah. Ada saklar **Kecilkan foto** di web dan di layar "Kirim ke PC" Android; matikan untuk mengirim resolusi penuh (mis. foto liburan). Pilihan terakhir diingat. Batas diatur lewat `photo_max_kb` di `config.json` (web; aplikasi Android memakai 512 KB tetap).
 - Hanya menerima koneksi dari jaringan lokal.
 
 Catatan: menghapus folder bersifat **permanen** (tidak masuk Recycle Bin). File yang ditaruh langsung di
@@ -43,11 +48,14 @@ Catatan: menghapus folder bersifat **permanen** (tidak masuk Recycle Bin). File 
 ## Aplikasi Android (opsional)
 
 Folder `android/` berisi aplikasi pendamping (tanpa library, Kotlin). Fungsinya:
+- **Kirim otomatis**: file di antrean terkirim sendiri saat HP tersambung Wi-Fi dan PC menjawab (saklar di layar utama). Di Huawei, izinkan aplikasi jalan di latar belakang.
+- **Kecepatan transfer**: layar utama, notifikasi, dan web menampilkan MB/s, persen, dan perkiraan sisa waktu.
 - **Menemukan PC otomatis** di Wi-Fi atau hotspot yang sama (siaran UDP port 47800, cadangan: pindai jaringan). Tidak perlu mengetik IP.
 - **Menu Bagikan**: dari Galeri atau File Manager pilih foto, Bagikan, DropBridge, pilih folder.
 - **Antrean**: kalau PC belum terjangkau, file ditahan di HP dan dikirim otomatis begitu PC ditemukan (aplikasi mencoba hingga 15 menit; sisanya bisa dikirim dari layar utama).
 - Berbagi **teks** (mis. link) dari aplikasi lain langsung ke tab Teks di PC.
 - **Lihat dan unduh dari PC**: telusuri folder di PC, ketuk file untuk mengunduh, atau unduh semua / ZIP. Hasil di folder Download/DropBridge di HP.
+- **Menu bawah Android**: Kirim (beranda bersih), Terima (mode host + QR), Folder (cari folder, "Kirim ke sini"), Lainnya (kecilkan foto, kirim otomatis, sambungan PC).
 - **Mode host** (untuk iPhone atau HP lain tanpa aplikasi): HP ini jadi server mini. Nyalakan hotspot, ketuk Mulai host, lalu di perangkat lain scan QR (atau buka alamat dan ketik kode 6 angka). Perangkat lain bisa mengirim file ke HP ini (tersimpan di Download/DropBridge) dan mengambil file yang kamu bagikan. Kode salah 5 kali = dikunci 1 menit.
   Di halaman host ada tombol **Unduh semua**, **ZIP**, **Simpan ke Foto / Bagikan** (iPhone), dan kotak **Simpan otomatis file baru** (cukup centang sekali; browser mungkin meminta izin unduhan).
 - **Terima otomatis** (HP Android penerima): sambungkan ke hotspot host, isi kode 6 angka, lalu setiap file yang dibagikan host tersimpan sendiri di Download/DropBridge.
@@ -67,6 +75,9 @@ Tips: isi `pin` tetap di `config.json` supaya PIN di aplikasi tidak perlu diisi 
 | `shared_dir` | Folder file bersama (relatif atau path absolut, mis. `D:/Transfer`) |
 | `max_upload_mb` | Batas ukuran satu file unggahan |
 | `session_hours` | Lama login bertahan |
+| `photo_max_kb` | Batas ukuran foto dalam KB; lebih besar dikecilkan di web (default 512, 0 = nonaktif) |
+| `idle_hours` | Perangkat lain otomatis keluar bila tidak aktif sekian jam (default 8, 0 = nonaktif) |
+| `mdns_name` | Nama tetap `nama.local` (default `dropbridge`, kosong = nonaktif) |
 | `lan_only` | `true` = tolak koneksi dari luar jaringan lokal |
 | `enable_docs` | `true` = buka dokumentasi API di `/docs` |
 
@@ -79,7 +90,7 @@ dropbridge/
   start.bat            jalankan di Windows
   build_android.bat    bangun APK aplikasi Android
   run.py               titik masuk, menampilkan alamat dan PIN
-  config.json          pengaturan (dibuat otomatis, tidak ikut GitHub)
+  config.json          pengaturan
   app/
     main.py            menggabungkan router, penjaga jaringan lokal
     auth.py            PIN -> token sesi (cookie atau header Bearer)

@@ -3,6 +3,7 @@ package com.dropbridge.app
 import android.app.Activity
 import android.content.Context
 import android.graphics.Color
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -45,7 +46,7 @@ class BrowseActivity : Activity() {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         val c: android.content.Context = this
-        scr = Ui.screen(this, "File di PC", "Menyambung ke PC...", back = true)
+        scr = Ui.screen(this, "Folder", "Menyambung ke PC...", back = false, nav = Ui.TAB_FILES)
         status = Ui.text(c, "", 14f, true, Ui.DEEP).apply {
             setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 12))
             visibility = View.GONE
@@ -116,24 +117,48 @@ class BrowseActivity : Activity() {
         }.start()
     }
 
+    private var query = ""
+
     private fun showFolders(rows: List<Triple<String, Int, Long>>, rootCount: Int) {
         val c: android.content.Context = this
         body.removeAllViews()
-        scr.title.text = "File di PC"
+        scr.title.text = "Folder"
         scr.subtitle.visibility = View.VISIBLE
-        scr.subtitle.text = if (rows.isEmpty() && rootCount == 0) "Belum ada folder di PC" else "${rows.size} folder, ketuk untuk melihat isinya"
-        for (r in rows) {
-            body.addView(rowView(Icon.FOLDER, r.first, "${r.second} file, ${fmtSize(r.third)}", null) {
-                folder = r.first
-                load()
-            }, Ui.lp(c, b = 8))
+        scr.subtitle.text = if (rows.isEmpty() && rootCount == 0) "Belum ada folder di PC" else "${rows.size} folder di PC"
+        val search = Ui.input(c, "Cari folder", android.text.InputType.TYPE_CLASS_TEXT, query)
+        body.addView(search, Ui.lp(c, b = 12))
+        val list = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        body.addView(list, Ui.lp(c))
+        fun fill() {
+            list.removeAllViews()
+            val q = query.trim().lowercase()
+            val shown = rows.filter { q.isEmpty() || it.first.lowercase().contains(q) }
+            for (r in shown) {
+                val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+                wrap.addView(rowView(Icon.FOLDER, r.first, "${r.second} file, ${fmtSize(r.third)}", null) {
+                    folder = r.first
+                    load()
+                })
+                wrap.addView(Ui.button(c, "Kirim ke sini", Ui.Kind.SOFT, 40) {
+                    Prefs.lastFolder = r.first
+                    startActivity(Intent(this, SendActivity::class.java).putExtra("pick", true))
+                }, Ui.lp(c, t = 4))
+                list.addView(wrap, Ui.lp(c, b = 10))
+            }
+            if (shown.isEmpty() && rows.isNotEmpty()) list.addView(Ui.text(c, "Tidak ada folder yang cocok.", 14f, false, Ui.MUTED))
+            if (q.isEmpty() && rootCount > 0) {
+                list.addView(rowView(Icon.FOLDER, "Tanpa folder", "$rootCount file", null) {
+                    folder = ""
+                    load()
+                }, Ui.lp(c, b = 8))
+            }
         }
-        if (rootCount > 0) {
-            body.addView(rowView(Icon.FOLDER, "Tanpa folder", "$rootCount file", null) {
-                folder = ""
-                load()
-            }, Ui.lp(c, b = 8))
-        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) { query = s?.toString() ?: ""; fill() }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
+        fill()
         body.addView(Ui.button(c, "Muat ulang", Ui.Kind.OUTLINE, 48) { load() }, Ui.lp(c, t = 8))
     }
 
@@ -143,6 +168,10 @@ class BrowseActivity : Activity() {
         scr.title.text = if (f.isEmpty()) "Tanpa folder" else f
         scr.subtitle.visibility = View.VISIBLE
         scr.subtitle.text = "${rows.size} file, ${fmtSize(rows.sumOf { it.size })}"
+        body.addView(Ui.iconButton(c, Icon.BACK, "Semua folder", Ui.Kind.OUTLINE, 44) {
+            folder = null
+            load()
+        }, Ui.lp(c, b = 12))
         if (rows.isNotEmpty()) {
             val bar = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
             bar.addView(Ui.iconButton(c, Icon.DOWN, "Unduh semua", Ui.Kind.PRIMARY, 48) {
@@ -229,7 +258,14 @@ class BrowseActivity : Activity() {
                     }
                     if (code != 200) throw java.io.IOException("PC menjawab HTTP $code")
                     val len = c.contentLengthLong
-                    val saved = FileSaver.save(applicationContext, subdir, name, len, c.inputStream)
+                    val meter = Rate()
+                    val counted = CountingInputStream(c.inputStream) { got ->
+                        if (meter.update(got)) {
+                            val pct = if (len > 0) " ${(got * 100 / len).toInt()}%" else ""
+                            runOnUiThread { showProgress("Mengunduh $name:$pct · ${Xfer.rate(meter.bps)}") }
+                        }
+                    }
+                    val saved = FileSaver.save(applicationContext, subdir, name, len, counted)
                     okCount++
                     pending--
                     runOnUiThread { showProgress("Tersimpan: Download/$subdir/$saved") }

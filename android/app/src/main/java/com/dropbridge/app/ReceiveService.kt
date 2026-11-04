@@ -135,7 +135,15 @@ class ReceiveService : Service() {
                     try {
                         if (d.responseCode != 200) throw IOException("HTTP ${d.responseCode}")
                         val len = d.contentLengthLong
-                        FileSaver.save(applicationContext, "DropBridge", name, len, d.inputStream)
+                        val meter = Rate()
+                        val counted = CountingInputStream(d.inputStream) { got ->
+                            if (meter.update(got)) {
+                                val pct = if (len > 0) " ${(got * 100 / len).toInt()}%" else ""
+                                status = "Menerima $name:$pct · ${Xfer.rate(meter.bps)}"
+                                update(status)
+                            }
+                        }
+                        FileSaver.save(applicationContext, "DropBridge", name, len, counted)
                     } finally {
                         d.disconnect()
                     }

@@ -22,3 +22,12 @@ def lan_ips() -> list[str]:
 
 def lan_urls(port: int) -> list[str]:
     return [f"http://{ip}:{port}" for ip in lan_ips()]
+
+
+def local_url() -> str:
+    """Alamat tetap berbasis nama (mDNS), mis. http://dropbridge.local:8000; kosong jika dimatikan."""
+    from .config import settings
+
+    if not settings.mdns_name:
+        return ""
+    return f"http://{settings.mdns_name}.local:{settings.port}"
