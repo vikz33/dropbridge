@@ -45,26 +45,11 @@ Catatan: menghapus folder bersifat **permanen** (tidak masuk Recycle Bin). File 
 `shared/` (tanpa folder) muncul sebagai "Tanpa folder". Thumbnail membutuhkan paket Pillow
 (terpasang otomatis oleh start.bat saat ada internet).
 
-## Aplikasi Android (opsional)
+## Aplikasi Android (repositori terpisah)
 
-Folder `android/` berisi aplikasi pendamping (tanpa library, Kotlin). Fungsinya:
-- **Kirim otomatis**: file di antrean terkirim sendiri saat HP tersambung Wi-Fi dan PC menjawab (saklar di layar utama). Di Huawei, izinkan aplikasi jalan di latar belakang.
-- **Kecepatan transfer**: layar utama, notifikasi, dan web menampilkan MB/s, persen, dan perkiraan sisa waktu.
-- **Menemukan PC otomatis** di Wi-Fi atau hotspot yang sama (siaran UDP port 47800, cadangan: pindai jaringan). Tidak perlu mengetik IP.
-- **Menu Bagikan**: dari Galeri atau File Manager pilih foto, Bagikan, DropBridge, pilih folder.
-- **Antrean**: kalau PC belum terjangkau, file ditahan di HP dan dikirim otomatis begitu PC ditemukan (aplikasi mencoba hingga 15 menit; sisanya bisa dikirim dari layar utama).
-- Berbagi **teks** (mis. link) dari aplikasi lain langsung ke tab Teks di PC.
-- **Lihat dan unduh dari PC**: telusuri folder di PC, ketuk file untuk mengunduh, atau unduh semua / ZIP. Hasil di folder Download/DropBridge di HP.
-- **Menu bawah Android**: Kirim (beranda bersih), Terima (mode host + QR), Folder (cari folder, "Kirim ke sini"), Lainnya (kecilkan foto, kirim otomatis, sambungan PC).
-- **Mode host** (untuk iPhone atau HP lain tanpa aplikasi): HP ini jadi server mini. Nyalakan hotspot, ketuk Mulai host, lalu di perangkat lain scan QR (atau buka alamat dan ketik kode 6 angka). Perangkat lain bisa mengirim file ke HP ini (tersimpan di Download/DropBridge) dan mengambil file yang kamu bagikan. Kode salah 5 kali = dikunci 1 menit.
-  Di halaman host ada tombol **Unduh semua**, **ZIP**, **Simpan ke Foto / Bagikan** (iPhone), dan kotak **Simpan otomatis file baru** (cukup centang sekali; browser mungkin meminta izin unduhan).
-- **Terima otomatis** (HP Android penerima): sambungkan ke hotspot host, isi kode 6 angka, lalu setiap file yang dibagikan host tersimpan sendiri di Download/DropBridge.
+Aplikasi Android pendamping (kirim otomatis, mode host, mencari PC otomatis, dan lain-lain) ada di repositori sendiri: **dropbridge-android**. Server ini tidak membutuhkannya untuk berjalan; web sudah cukup.
 
-Cara membangun: klik dua kali **build_android.bat** (butuh Android Studio/SDK dan JDK 17 seperti proyek lain).
-Hasilnya `DropBridge.apk` ditaruh di `shared\DropBridge-APK\`, lalu unduh dari HP lewat halaman web DropBridge dan pasang.
-Log build ada di `android\build_log.txt`.
-
-Tips: isi `pin` tetap di `config.json` supaya PIN di aplikasi tidak perlu diisi ulang tiap start.bat dijalankan.
+Untuk membagikan APK lewat server ini, taruh `DropBridge.apk` di folder `shared\DropBridge-APK\`, lalu unduh dari HP lewat halaman web dan pasang. Server membalas pencarian dari aplikasi lewat UDP port 47800 (`app/discovery.py`).
 
 ## Pengaturan (config.json)
 
@@ -88,7 +73,6 @@ Ubah lalu jalankan ulang start.bat.
 ```
 dropbridge/
   start.bat            jalankan di Windows
-  build_android.bat    bangun APK aplikasi Android
   run.py               titik masuk, menampilkan alamat dan PIN
   config.json          pengaturan
   app/
@@ -104,7 +88,6 @@ dropbridge/
       storage.py       penyimpanan file (sekarang folder lokal)
       thumbs.py        thumbnail foto (cache di data/thumbs)
   web/                 index.html, app.js, style.css
-  android/             aplikasi Android pendamping (build_android.bat)
   shared/              file bersama (dibuat otomatis)
   data/                riwayat teks (clips.json, dibuat otomatis)
 ```

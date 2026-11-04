@@ -9,11 +9,8 @@ data/
 config.json
 _dropbridge/
 
-# Android
-android/.gradle/
-android/build_log.txt
-android/local.properties
-android/**/build/
+# Repositori Android terpisah (taruh di luar folder ini)
+dropbridge-android/
 *.apk
 
 # Lain-lain
