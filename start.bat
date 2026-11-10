@@ -57,7 +57,16 @@ if errorlevel 1 (
   echo.
 )
 
-".venv\Scripts\python.exe" run.py
-echo.
-echo DropBridge berhenti.
-pause
+REM "start.bat konsol" = jalan di jendela hitam seperti dulu (untuk melihat catatan langsung).
+if /i "%~1"=="konsol" (
+  ".venv\Scripts\python.exe" run.py
+  echo.
+  echo DropBridge berhenti.
+  pause
+  exit /b 0
+)
+
+REM Biasanya: jalan di latar belakang dengan ikon di dekat jam (tray). Jendela ini menutup sendiri.
+start "" ".venv\Scripts\pythonw.exe" tray.py
+echo DropBridge jalan di latar belakang. Cari ikonnya di dekat jam (klik ^ bila tersembunyi).
+timeout /t 4 >nul

@@ -26,25 +26,19 @@
       <div class="brand">DropBridge</div>
       <nav class="mainnav" aria-label="Menu utama">
         <a href="#/" data-nav="send"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><span>Kirim</span></a>
-        <a href="#/folders" data-nav="folders"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Folder <b id="folderCount" class="pill"></b></span></a>
-        <a href="#/lainnya" data-nav="more"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Lainnya</span></a>
+        <a href="#/folders" data-nav="folders"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>File <b id="folderCount" class="pill"></b></span></a>
+        <a href="#/hubungkan" data-nav="more"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z"/></svg><span>Hubungkan</span></a>
       </nav>
       <div class="top-right">
-        <button id="connBtn" class="btn small outline" type="button" hidden>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z"/></svg>
-          <span>Hubungkan HP</span>
+        <a id="devBtn" class="devstat" href="#/hubungkan" title="Perangkat yang terhubung"><span id="dot" class="dot"></span><span id="devCount">Terhubung</span></a>
+        <button id="setBtn" class="iconbtn gear" type="button" aria-label="Pengaturan" title="Pengaturan">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
         </button>
-        <a id="devBtn" class="devstat" href="#/lainnya" title="Perangkat yang terhubung"><span id="dot" class="dot"></span><span id="devCount">Terhubung</span></a>
       </div>
     </header>
 
     <main id="pageSend" class="page">
       <section class="card send">
-        <div class="seg modeseg" role="group" aria-label="Jenis kiriman">
-          <button id="modeFile" type="button" class="btn small" aria-pressed="true">File</button>
-          <button id="modeText" type="button" class="btn small" aria-pressed="false">Teks</button>
-        </div>
-
         <div id="sendFile" class="send-block">
           <label for="folderInput" class="lbl">Kirim ke folder</label>
           <div class="folder-row">
@@ -68,11 +62,15 @@
             <input id="picker" type="file" multiple hidden>
           </div>
 
-          <label class="shrink-opt"><input id="shrinkPhotos" type="checkbox" checked>
-            <span><b>Kecilkan foto (maks <span id="shrinkKB">512</span> KB)</b><small>Hilangkan centang untuk kirim resolusi penuh, mis. foto liburan.</small></span></label>
+          <div class="send-opts">
+            <label class="shrink-opt"><input id="shrinkPhotos" type="checkbox" checked>
+              <span><b>Kecilkan foto ke bawah <span id="shrinkKB">512</span> KB</b><small>Hilangkan centang untuk resolusi penuh, mis. foto liburan.</small></span></label>
+            <button id="modeText" type="button" class="linkbtn">Kirim teks</button>
+          </div>
         </div>
 
         <div id="sendText" class="send-block" hidden>
+          <button id="modeFile" type="button" class="linkbtn">&lsaquo; Kirim file</button>
           <form id="clipForm" class="clip-form">
             <textarea id="clipText" rows="4" placeholder="Tulis atau tempel teks/link, lalu kirim. Ctrl+Enter untuk kirim cepat."></textarea>
             <button id="clipSend" class="btn primary" type="submit">Kirim</button>
@@ -83,6 +81,7 @@
 
       <section class="card up-card" id="upCard" hidden>
         <h2 class="up-title">Pengiriman</h2>
+        <p id="upNote" class="muted small" hidden>Biarkan halaman ini terbuka dan layar menyala sampai selesai.</p>
         <ul id="uploads" class="uploads"></ul>
       </section>
     </main>
@@ -125,33 +124,20 @@
       </section>
     </main>
 
-    <main id="pageMore" class="page" hidden>
-      <h1 class="page-title">Lainnya</h1>
+    <main id="pageMore" class="page connect" hidden>
+      <section class="card qr-card">
+        <h2>Masuk dari HP</h2>
+        <div class="addr" data-addr hidden></div>
+        <p id="qrOff" class="muted" hidden>Alamat PC belum terdeteksi.</p>
+      </section>
       <section class="card more-card">
         <div class="dev-head">
           <h2>Perangkat terhubung</h2>
-          <button id="devOthers" class="btn ghost small danger" type="button">Keluarkan semua lainnya</button>
+          <button id="devOthers" class="btn ghost small danger" type="button">Keluarkan semua</button>
         </div>
         <p class="muted small">Perangkat yang tidak aktif 8 jam otomatis keluar.</p>
+        <p id="devNote" class="muted small" hidden>Mengeluarkan perangkat hanya bisa dari PC.</p>
         <div id="devList" class="dev-list"></div>
-      </section>
-      <section class="card more-card rows">
-        <div class="mrow">
-          <span><b>Kecilkan foto otomatis</b><small>Foto di atas <span class="shrinkKB2">512</span> KB dikecilkan sebelum dikirim.</small></span>
-          <input id="shrinkPhotos2" type="checkbox" checked aria-label="Kecilkan foto otomatis">
-        </div>
-        <div class="mrow">
-          <span><b>Nama perangkat ini</b><small id="myName">-</small></span>
-          <button id="renameBtn" class="btn small" type="button">Ubah</button>
-        </div>
-        <div class="mrow">
-          <span><b>Hubungkan HP</b><small>QR dan alamat agar HP lain bisa masuk</small></span>
-          <button id="connBtn2" class="btn small" type="button">Tampilkan</button>
-        </div>
-        <div class="mrow">
-          <span><b>Keluar</b><small>Perlu PIN untuk masuk lagi.</small></span>
-          <button id="logout" class="btn small danger" type="button">Keluar</button>
-        </div>
       </section>
     </main>
   </div>
@@ -180,10 +166,17 @@
     </form>
   </dialog>
 
-  <dialog id="connDlg" class="conn-dlg">
+  <dialog id="setDlg" class="small-dlg">
     <div class="dlg-body">
-      <div class="dev-head"><h3>Hubungkan HP</h3><button id="connClose" class="btn ghost small" type="button">Tutup</button></div>
-      <div class="addr" data-addr hidden></div>
+      <div class="dev-head"><h3>Pengaturan</h3><button id="setClose" class="btn ghost small" type="button">Tutup</button></div>
+      <div class="mrow">
+        <span><b>Nama perangkat ini</b><small id="myName">-</small></span>
+        <button id="renameBtn" class="btn small" type="button">Ubah</button>
+      </div>
+      <div class="mrow">
+        <span><b>Keluar</b><small>Perlu PIN untuk masuk lagi.</small></span>
+        <button id="logout" class="btn small danger" type="button">Keluar</button>
+      </div>
     </div>
   </dialog>
 

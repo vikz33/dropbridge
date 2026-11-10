@@ -6,6 +6,7 @@ Nama folder ditentukan bebas oleh pengguna. File yang langsung berada di shared/
 tetap ditampilkan sebagai folder khusus bernama kosong "".
 Penggantinya nanti (mis. penyimpanan lain) cukup meniru method kelas LocalStorage.
 """
+import hashlib
 import io
 import mimetypes
 import os
@@ -328,11 +329,69 @@ class LocalStorage:
     def new_tmp(self, folder: str) -> Path:
         return self._folder_dir(folder) / f".upload-{secrets.token_hex(6)}.part"
 
-    def commit(self, tmp: Path, folder: str, name: str) -> str:
+    def resume_tmp(self, folder: str, uid: str) -> Path:
+        """File sementara tetap per kiriman (uid dari HP), supaya kiriman yang putus bisa dilanjutkan."""
+        uid = re.sub(r"[^A-Za-z0-9_-]", "", uid)[:64]
+        if not uid:
+            raise StorageError("ID kiriman tidak sah.", 400)
+        return self._folder_dir(folder) / f".upload-r-{uid}.part"
+
+    @staticmethod
+    def _sha256(p: Path) -> str:
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            while chunk := f.read(1 << 20):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def _find_same(self, d: Path, name: str, tmp: Path) -> Optional[str]:
+        """Cari file yang isinya persis sama dengan tmp (nama sama atau 'nama (n)')."""
+        size = tmp.stat().st_size
+        stem, ext = os.path.splitext(name)
+        cands = [name] + [f"{stem} ({i}){ext}" for i in range(1, 51)]
+        digest = None
+        for c in cands:
+            p = d / c
+            try:
+                if not p.is_file() or p.stat().st_size != size:
+                    continue
+            except OSError:
+                continue
+            if digest is None:
+                digest = self._sha256(tmp)
+            if self._sha256(p) == digest:
+                return c
+        return None
+
+    def commit(self, tmp: Path, folder: str, name: str, dedupe: bool = True) -> Tuple[str, bool]:
+        """Simpan tmp sebagai file final. Mengembalikan (nama, ganda).
+
+        Bila di folder itu sudah ada file yang isinya persis sama, kiriman ini dibuang
+        dan nama file yang sudah ada dikembalikan (ganda = True), supaya tidak ada 'foto (1).jpg'.
+        """
         d = self._folder_dir(folder)
+        if dedupe:
+            same = self._find_same(d, name, tmp)
+            if same:
+                tmp.unlink(missing_ok=True)
+                return same, True
         final = self._unique(d, name)
         os.replace(tmp, d / final)
-        return final
+        return final, False
+
+    def clean_stale_parts(self, max_age_s: float = 3 * 86400) -> int:
+        """Hapus sisa kiriman yang tidak pernah selesai (lebih dari 3 hari)."""
+        n = 0
+        now = time.time()
+        for d in [self.root] + [p for p in self.root.iterdir() if p.is_dir()]:
+            try:
+                for p in d.glob(".upload-*.part"):
+                    if now - p.stat().st_mtime > max_age_s:
+                        p.unlink(missing_ok=True)
+                        n += 1
+            except OSError:
+                continue
+        return n
 
     def discard(self, tmp: Path) -> None:
         tmp.unlink(missing_ok=True)

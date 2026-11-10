@@ -1,6 +1,6 @@
 :root {
   color-scheme: light dark;
-  --bg: #f1f6f5; --card: #ffffff; --text: #0b1f1c; --muted: #4b635f; --line: #d5e2df;
+  --bg: #f7f8f7; --card: #ffffff; --text: #0b1f1c; --muted: #52665f; --line: #dce7e4;
   --accent: #0f766e; --accent-ink: #ffffff; --danger: #b91c1c; --warn: #b45309;
   --radius: 20px; --deep: #0b3d38; --soft: #d6eee9;
   --shadow: none;
@@ -388,3 +388,26 @@ input, textarea { border-radius: 14px; }
 .dev-list { max-height: none; overflow: visible; }
 .dev-row .btn { flex: none; }
 .send .hint:empty { display: none; }
+
+/* Tombol di baris pengiriman yang gagal */
+.up-actions { grid-column: 1 / -1; display: flex; gap: 8px; margin-top: 6px; }
+.up.err:has(.up-actions) { cursor: default; }
+
+/* ---------- Remake: 3 menu, pengaturan di ikon, Hubungkan sebagai halaman ---------- */
+.iconbtn.gear { width: 44px; height: 44px; }
+.linkbtn { appearance: none; border: 0; background: none; padding: 10px 4px; min-height: 44px; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.send-opts { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.send-opts .shrink-opt { margin: 0; flex: 1 1 260px; }
+#sendText .linkbtn { align-self: flex-start; margin-bottom: 4px; }
+.connect { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; align-items: start; }
+.qr-card { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.qr-card h2, .connect .more-card h2 { margin: 0; font-size: 1.1rem; }
+.mrow { gap: 12px; }
+.connect .more-card p.muted { margin: 0; }
+
+/* Folder tujuan di setiap baris pengiriman */
+.up-dest { display: inline-flex; align-items: center; gap: 5px; max-width: 45vw; padding: 3px 9px; border-radius: 999px; background: var(--soft); color: var(--deep); font-size: .8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .up-dest { color: var(--text); } }
+.up-dest svg { flex: none; }
+.up .up-state, .up .bar, .up .up-actions { grid-column: 1 / -1; }

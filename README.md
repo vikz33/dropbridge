@@ -6,8 +6,8 @@ tanpa memasang aplikasi di HP. Cukup browser.
 ## Cara pakai
 
 1. Pasang Python 3.10+ dari python.org (centang **Add python.exe to PATH**). Sekali saja.
-2. Klik dua kali **start.bat**. Pertama kali akan memasang paket otomatis.
-3. Jendela hitam menampilkan **alamat** dan **PIN**. Contoh:
+2. Klik dua kali **start.bat**. Pertama kali akan memasang paket otomatis. DropBridge lalu jalan di latar belakang dengan **ikon di dekat jam** Windows (klik ^ bila tersembunyi). Klik kanan ikon: **Buka DropBridge**, **Hubungkan HP (QR)**, **Buka folder shared**, PIN, **Mulai otomatis saat Windows menyala**, **Berhenti**. Catatan server ada di `data\server.log`.
+3. Ingin jendela hitam seperti dulu? Jalankan `start.bat konsol`. Jendela itu menampilkan **alamat** dan **PIN**. Contoh:
    ```
    Di HP     : http://192.168.1.5:8000
    PIN       : 483920
@@ -23,7 +23,10 @@ Pastikan juga Wi-Fi di PC bertipe **Private** (bukan Public).
 
 ## Fitur (v2)
 
-**Tampilan:** tiga halaman. **Kirim** (beranda bersih: File/Teks, folder tujuan, Pilih file), **Folder** (cari, daftar atau kotak, isi folder) dan **Lainnya** (perangkat terhubung, nama perangkat, kecilkan foto, keluar). Di PC menunya di atas dan ada tombol **Hubungkan HP** (QR); di HP menunya di bawah layar.
+- **Pengiriman bisa dilanjutkan**: dari aplikasi Android, kiriman yang putus di tengah (Wi-Fi gudang tidak stabil) dilanjutkan dari bagian yang sudah sampai, bukan dari nol. Sisa kiriman yang tidak pernah selesai dihapus otomatis setelah 3 hari.
+- **Tidak ada file ganda**: bila file yang isinya persis sama sudah ada di folder itu, kiriman dilewati (tidak jadi `foto (1).jpg`). Web menampilkan "Sudah ada di ...".
+
+**Tampilan:** tiga menu yang sama di PC, HP, dan aplikasi Android. **Kirim** (folder tujuan, Pilih file, kecilkan foto, tautan Kirim teks), **File** (cari, daftar atau kotak, isi folder) dan **Hubungkan** (QR agar HP lain masuk, perangkat terhubung). Nama perangkat dan Keluar ada di ikon pengaturan di kanan atas. Di PC menunya di atas; di HP menunya di bawah layar.
 
 - Login PIN (percobaan salah dibatasi: 5x, lalu kunci 60 detik)
 - **Folder per barang/dokumen**: nama folder bebas diketik pengguna (mis. `27 012345`). Satu level, isinya datar.
@@ -36,7 +39,6 @@ Pastikan juga Wi-Fi di PC bertipe **Private** (bukan Public).
 - Dari HP: ganti nama folder, hapus folder (dengan konfirmasi yang menyebut jumlah file), unduh folder sebagai ZIP.
 - Di PC: seret file ke halaman (masuk ke folder yang tertulis di kotak), atau tempel gambar dengan Ctrl+V.
 - Kirim teks atau link antar perangkat.
-- **Alamat tetap `dropbridge.local:8000`** (mDNS): tidak berubah walau IP PC berganti. Chrome di Android umumnya tidak bisa membuka alamat `.local`; di Android pairing pakai QR atau ketik IP.
 - **Identitas perangkat**: tiap perangkat diberi nama saat pertama masuk. Tombol **Perangkat** menampilkan siapa yang terhubung (nama, jenis, IP, aktif terakhir) dan bisa **Keluarkan** perangkat tak dikenal. Perangkat lain otomatis keluar setelah 8 jam tidak aktif (PC sendiri dikecualikan).
 - **Foto otomatis dikecilkan**: foto JPG/PNG/WebP di atas 512 KB dikecilkan resolusi dan kualitasnya sebelum dikirim (di web dan aplikasi Android), hasilnya JPG di bawah 512 KB. Foto yang sudah kecil tidak diubah. Ada saklar **Kecilkan foto** di web dan di layar "Kirim ke PC" Android; matikan untuk mengirim resolusi penuh (mis. foto liburan). Pilihan terakhir diingat. Batas diatur lewat `photo_max_kb` di `config.json` (web; aplikasi Android memakai 512 KB tetap).
 - Hanya menerima koneksi dari jaringan lokal.
@@ -62,7 +64,6 @@ Untuk membagikan APK lewat server ini, taruh `DropBridge.apk` di folder `shared\
 | `session_hours` | Lama login bertahan |
 | `photo_max_kb` | Batas ukuran foto dalam KB; lebih besar dikecilkan di web (default 512, 0 = nonaktif) |
 | `idle_hours` | Perangkat lain otomatis keluar bila tidak aktif sekian jam (default 8, 0 = nonaktif) |
-| `mdns_name` | Nama tetap `nama.local` (default `dropbridge`, kosong = nonaktif) |
 | `lan_only` | `true` = tolak koneksi dari luar jaringan lokal |
 | `enable_docs` | `true` = buka dokumentasi API di `/docs` |
 
@@ -72,7 +73,8 @@ Ubah lalu jalankan ulang start.bat.
 
 ```
 dropbridge/
-  start.bat            jalankan di Windows
+  start.bat            jalankan di Windows (ikon tray; "start.bat konsol" = jendela hitam)
+  tray.py              ikon tray: server di latar belakang, mulai otomatis
   run.py               titik masuk, menampilkan alamat dan PIN
   config.json          pengaturan
   app/

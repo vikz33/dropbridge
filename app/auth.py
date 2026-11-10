@@ -4,23 +4,63 @@ Tiap sesi mewakili satu perangkat: nama, jenis, IP, dan waktu aktif terakhir ter
 supaya pemilik PC bisa melihat siapa saja yang terhubung dan mengeluarkannya.
 """
 import ipaddress
+import json
+import os
 import re
 import secrets
+import threading
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from .config import settings
+from .netinfo import lan_ips
 
 COOKIE = "db_token"
 MAX_FAILS = 5
 LOCK_SECONDS = 60
 ONLINE_SECONDS = 75  # dianggap "online" jika aktif dalam rentang ini
 
+SAVE_EVERY = 60  # detik; waktu "aktif terakhir" disimpan paling sering sekali per menit
+
 # token -> {id, created, last, expires, name, kind, ip, ua, local}
 _sessions: dict[str, dict] = {}
 _fails: dict[str, tuple[int, float]] = {}  # ip -> (jumlah gagal, terkunci sampai)
+
+# Sesi disimpan di data/sessions.json supaya perangkat tidak perlu login ulang setiap server di-restart.
+_SESS_FILE = settings.data_dir / "sessions.json"
+_lock = threading.Lock()
+_last_save = 0.0
+_KEYS = ("id", "created", "last", "expires", "name", "kind", "ip", "ua", "local")
+
+
+def _load() -> None:
+    try:
+        raw = json.loads(_SESS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    now = time.time()
+    for token, s in (raw.items() if isinstance(raw, dict) else []):
+        if isinstance(s, dict) and all(k in s for k in _KEYS) and s["expires"] > now:
+            _sessions[token] = {k: s[k] for k in _KEYS}
+
+
+def _save() -> None:
+    global _last_save
+    with _lock:
+        _last_save = time.time()
+        data = {t: dict(s) for t, s in list(_sessions.items())}
+        try:
+            _SESS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = _SESS_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            os.replace(tmp, _SESS_FILE)
+        except OSError:
+            pass  # gagal simpan tidak boleh menghentikan server; sesi tetap jalan di memori
+
+
+_load()
 
 
 def _token_from(request: Request) -> str | None:
@@ -34,14 +74,22 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
 
-def _is_loopback(host: str) -> bool:
+def is_this_pc(request: Request) -> bool:
+    """True untuk akses langsung dari PC ini: lewat localhost, atau lewat alamat LAN milik PC sendiri.
+
+    Akses lewat tunnel/proxy (ada header forwarded) tidak dianggap dari PC ini.
+    """
+    if request.headers.get("x-forwarded-for") or request.headers.get("forwarded"):
+        return False
     try:
-        ip = ipaddress.ip_address(host)
+        ip = ipaddress.ip_address(_client_ip(request))
     except ValueError:
         return False
     if ip.version == 6 and ip.ipv4_mapped:
         ip = ip.ipv4_mapped
-    return ip.is_loopback
+    if ip.is_loopback:
+        return True
+    return str(ip) in set(lan_ips())
 
 
 def _kind_of(ua: str) -> str:
@@ -107,6 +155,8 @@ def require_auth(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Belum login.")
     s["last"] = now
     s["ip"] = _client_ip(request)
+    if now - _last_save > SAVE_EVERY:
+        _save()
 
 
 def _current(request: Request) -> dict:
@@ -141,7 +191,7 @@ def login(body: LoginIn, request: Request, response: Response):
 
     _fails.pop(ip, None)
     ua = request.headers.get("user-agent", "")[:300]
-    local = _is_loopback(ip) and not request.headers.get("x-forwarded-for")
+    local = is_this_pc(request)
     for t in [t for t, s in _sessions.items() if not _alive(s, now) or (s["ip"] == ip and s["ua"] == ua)]:
         _sessions.pop(t, None)  # sesi usang, atau sesi lama dari perangkat yang sama
     token = secrets.token_urlsafe(32)
@@ -159,6 +209,7 @@ def login(body: LoginIn, request: Request, response: Response):
         "ua": ua,
         "local": local,
     }
+    _save()
     response.set_cookie(COOKIE, token, max_age=ttl, httponly=True, samesite="lax")
     return {"ok": True, "token": token, "need_name": not name}
 
@@ -166,8 +217,8 @@ def login(body: LoginIn, request: Request, response: Response):
 @router.post("/logout")
 def logout(request: Request, response: Response):
     token = _token_from(request)
-    if token:
-        _sessions.pop(token, None)
+    if token and _sessions.pop(token, None):
+        _save()
     response.delete_cookie(COOKIE)
     return {"ok": True}
 
@@ -188,6 +239,7 @@ def rename_device(body: DeviceIn, request: Request):
     if not name:
         raise HTTPException(status_code=400, detail="Nama perangkat tidak boleh kosong.")
     _current(request)["name"] = name
+    _save()
     return {"ok": True, "name": name}
 
 
@@ -214,20 +266,30 @@ def devices(request: Request):
     return {"devices": items, "online": sum(1 for d in items if d["online"])}
 
 
+def _require_pc(request: Request) -> None:
+    """Mengeluarkan perangkat hanya boleh dari PC, supaya HP tidak bisa mengeluarkan PC atau HP lain."""
+    if not _current(request)["local"]:
+        raise HTTPException(status_code=403, detail="Mengeluarkan perangkat hanya bisa dari PC.")
+
+
 @router.delete("/devices/{device_id}", dependencies=[Depends(require_auth)])
 def revoke_device(device_id: str, request: Request):
+    _require_pc(request)
     for t, s in list(_sessions.items()):
         if s["id"] == device_id:
             _sessions.pop(t, None)
+            _save()
             return {"ok": True}
     raise HTTPException(status_code=404, detail="Perangkat tidak ditemukan.")
 
 
 @router.post("/devices/revoke-others", dependencies=[Depends(require_auth)])
 def revoke_others(request: Request):
+    _require_pc(request)
     mine = _token_from(request)
     n = 0
     for t in [t for t in _sessions if t != mine]:
         _sessions.pop(t, None)
         n += 1
+    _save()
     return {"ok": True, "revoked": n}
