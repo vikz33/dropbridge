@@ -25,6 +25,12 @@ def list_files(folder: str = ""):
     return {"folder": folder, "files": storage.list_files(folder)}
 
 
+@router.get("/recent")
+def recent_files(limit: int = 8):
+    """File yang paling baru masuk, dari semua folder."""
+    return {"files": storage.recent_files(max(1, min(limit, 50)))}
+
+
 @router.get("/upload-offset")
 def upload_offset(uid: str, folder: str = ""):
     """Berapa byte kiriman ini yang sudah sampai di PC (0 bila belum ada). Untuk melanjutkan kiriman yang putus."""

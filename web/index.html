@@ -7,6 +7,7 @@
   <title>DropBridge</title>
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
   <link rel="stylesheet" href="style.css">
+  <script>try{var t=localStorage.getItem('db_theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 
@@ -23,105 +24,120 @@
 
   <div id="app" class="wrap" hidden>
     <header class="top">
-      <div class="brand">DropBridge</div>
+      <a class="logo" href="#/" aria-label="DropBridge, ke halaman Kirim"></a>
+      <div class="ttl">
+        <h1 id="pageTitle">Kirim ke PC</h1>
+        <a id="devBtn" class="status" href="#/hubungkan" title="Perangkat yang terhubung"><span id="dot" class="dot"></span><span id="statusText">Menghubungkan...</span></a>
+      </div>
       <nav class="mainnav" aria-label="Menu utama">
         <a href="#/" data-nav="send"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg><span>Kirim</span></a>
-        <a href="#/folders" data-nav="folders"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>File <b id="folderCount" class="pill"></b></span></a>
+        <a href="#/folders" data-nav="folders"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>File</span></a>
         <a href="#/hubungkan" data-nav="more"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z"/></svg><span>Hubungkan</span></a>
       </nav>
-      <div class="top-right">
-        <a id="devBtn" class="devstat" href="#/hubungkan" title="Perangkat yang terhubung"><span id="dot" class="dot"></span><span id="devCount">Terhubung</span></a>
-        <button id="setBtn" class="iconbtn gear" type="button" aria-label="Pengaturan" title="Pengaturan">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
-        </button>
-      </div>
+      <button id="setBtn" class="iconbtn gear" type="button" aria-label="Pengaturan" title="Pengaturan">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
     </header>
 
-    <main id="pageSend" class="page">
-      <section class="card send">
+    <main id="pageSend" class="page send-page">
+      <div class="send-col">
         <div id="sendFile" class="send-block">
-          <label for="folderInput" class="lbl">Kirim ke folder</label>
-          <div class="folder-row">
-            <div class="combo">
+          <section class="card fcard">
+            <label for="folderInput" class="lbl">Folder tujuan</label>
+            <div class="combo fc-input">
+              <span class="fc-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
               <input id="folderInput" type="text" placeholder="Ketik nama folder, mis. 27 012345" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
               <ul id="suggest" class="suggest" hidden></ul>
             </div>
-            <button id="allBtn" class="iconbtn" type="button" title="Semua folder" aria-label="Semua folder">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
-              <span id="allCount" class="pill" hidden></span>
-            </button>
-          </div>
-          <p id="folderHint" class="hint"></p>
-          <div id="recentChips" class="chips" hidden></div>
+            <p id="folderHint" class="hint"></p>
+            <div id="recentChips" class="chips" hidden></div>
+          </section>
 
+          <div class="actions2">
+            <button id="pick" class="bigbtn primary" type="button"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>Pilih file</button>
+            <button id="snap" class="bigbtn soft" type="button"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>Foto langsung</button>
+          </div>
           <div class="dropzone">
-            <span class="dz-icon" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span>
+            <span class="dz-icon" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg></span>
             <div class="dz-title">Seret file ke sini</div>
             <div class="dz-sub">atau tempel gambar dengan Ctrl+V</div>
-            <button id="pick" class="btn primary" type="button">Pilih file</button>
-            <input id="picker" type="file" multiple hidden>
+            <button id="pick2" class="btn primary" type="button">Pilih file</button>
           </div>
+          <input id="picker" type="file" multiple hidden>
+          <input id="camera" type="file" accept="image/*" capture="environment" hidden>
 
           <div class="send-opts">
-            <label class="shrink-opt"><input id="shrinkPhotos" type="checkbox" checked>
-              <span><b>Kecilkan foto ke bawah <span id="shrinkKB">512</span> KB</b><small>Hilangkan centang untuk resolusi penuh, mis. foto liburan.</small></span></label>
-            <button id="modeText" type="button" class="linkbtn">Kirim teks</button>
+            <span id="shrinkLine" class="muted small"><span id="shrinkText">Foto dikecilkan ≤ 512 KB</span> · <button id="shrinkEdit" type="button" class="linkbtn inline">Ubah</button></span>
+            <button id="modeText" type="button" class="linkbtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>Kirim teks</button>
           </div>
         </div>
 
-        <div id="sendText" class="send-block" hidden>
+        <section id="sendText" class="card text-card" hidden>
           <button id="modeFile" type="button" class="linkbtn">&lsaquo; Kirim file</button>
           <form id="clipForm" class="clip-form">
             <textarea id="clipText" rows="4" placeholder="Tulis atau tempel teks/link, lalu kirim. Ctrl+Enter untuk kirim cepat."></textarea>
             <button id="clipSend" class="btn primary" type="submit">Kirim</button>
           </form>
           <ul id="clipList" class="clips"></ul>
-        </div>
-      </section>
+        </section>
+      </div>
 
-      <section class="card up-card" id="upCard" hidden>
-        <h2 class="up-title">Pengiriman</h2>
-        <p id="upNote" class="muted small" hidden>Biarkan halaman ini terbuka dan layar menyala sampai selesai.</p>
-        <ul id="uploads" class="uploads"></ul>
-      </section>
+      <div class="side-col">
+        <section class="card up-card" id="upCard" hidden>
+          <div class="card-head"><h2>Pengiriman</h2><span id="upSum" class="muted small"></span></div>
+          <div class="bar sum-bar"><i id="upSumBar"></i></div>
+          <p id="upNote" class="muted small" hidden>Biarkan halaman ini terbuka dan layar menyala sampai selesai.</p>
+          <ul id="uploads" class="uploads"></ul>
+        </section>
+        <section class="card recent-card" id="recentCard" hidden>
+          <div class="card-head"><h2>Masuk terakhir</h2><a href="#/folders" class="linkbtn">Lihat di File</a></div>
+          <ul id="recentList" class="rlist"></ul>
+        </section>
+        <section class="card dev-card" id="devCard" hidden>
+          <div class="card-head"><h2>Perangkat terhubung</h2><a href="#/hubungkan" class="linkbtn">Hubungkan HP</a></div>
+          <div id="devChips" class="chips"></div>
+        </section>
+      </div>
     </main>
 
     <main id="pageFolders" class="page" hidden>
-      <section class="card panel active" data-panel="files">
-        <div id="homeView">
-          <div class="panel-head">
-            <h2>Folder</h2>
-            <div class="fv-tools">
-              <input id="fSearch" type="search" placeholder="Cari folder" aria-label="Cari folder" autocomplete="off">
-              <div class="seg" role="group" aria-label="Tampilan">
-                <button id="fgList" type="button" class="btn small" aria-pressed="true" title="Tampilan daftar" aria-label="Tampilan daftar">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
-                </button>
-                <button id="fgGrid" type="button" class="btn small" aria-pressed="false" title="Tampilan kotak" aria-label="Tampilan kotak">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
-                </button>
-              </div>
+      <div id="homeView">
+        <div class="ftools">
+          <div class="search">
+            <svg class="search-ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input id="fSearch" type="search" placeholder="Cari folder" aria-label="Cari folder" autocomplete="off">
+          </div>
+          <div class="tbar">
+            <button id="fSort" class="sortbtn" type="button" aria-haspopup="dialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg><span class="sort-label">Terbaru diubah</span><svg class="chev-d" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+            <div class="seg" role="group" aria-label="Tampilan">
+              <button id="fgList" type="button" aria-pressed="true" title="Tampilan daftar" aria-label="Tampilan daftar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+              <button id="fgGrid" type="button" aria-pressed="false" title="Tampilan ikon" aria-label="Tampilan ikon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
             </div>
           </div>
-          <ul id="folderList" class="flist all-list"></ul>
         </div>
+        <ul id="folderList" class="flist"></ul>
+      </div>
 
-        <div id="folderView" hidden>
-          <div class="fv-head">
-            <a class="btn ghost small" href="#/folders">&lsaquo; Semua folder</a>
-            <div class="fv-title">
-              <h2 id="fvTitle"></h2>
-              <span id="fvMeta" class="muted small"></span>
-            </div>
-            <div class="fv-actions">
-              <a id="fvZip" class="btn small primary" href="#" download>Unduh ZIP</a>
-              <button id="fvRename" class="btn small" type="button">Ganti nama</button>
-              <button id="fvDelete" class="btn small danger" type="button">Hapus folder</button>
-            </div>
+      <div id="folderView" hidden>
+        <div class="fv-head">
+          <a class="iconbtn back" href="#/folders" aria-label="Kembali ke semua folder"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
+          <div class="fv-title">
+            <h2 id="fvTitle"></h2>
+            <span id="fvMeta" class="muted small"></span>
           </div>
-          <div id="grid" class="grid"></div>
+          <button id="fvSend" class="btn primary fv-send" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>Kirim ke folder ini</button>
+          <button id="fvMenu" class="iconbtn dots" type="button" aria-label="Pilihan folder" aria-haspopup="menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
         </div>
-      </section>
+        <div class="tbar">
+          <button id="gSort" class="sortbtn" type="button" aria-haspopup="dialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg><span class="sort-label">Terbaru diambil</span><svg class="chev-d" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div class="seg" role="group" aria-label="Tampilan">
+              <button id="gvList" type="button" aria-pressed="true" title="Tampilan daftar" aria-label="Tampilan daftar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+              <button id="gvGrid" type="button" aria-pressed="false" title="Tampilan ikon" aria-label="Tampilan ikon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
+            </div>
+        </div>
+        <div id="grid" class="grid"></div>
+        <input id="picker2" type="file" multiple hidden>
+      </div>
     </main>
 
     <main id="pageMore" class="page connect" hidden>
@@ -151,6 +167,7 @@
       <div class="pv-nav">
         <button id="pvPrev" class="btn small" type="button" aria-label="Sebelumnya">&lsaquo;</button>
         <button id="pvNext" class="btn small" type="button" aria-label="Berikutnya">&rsaquo;</button>
+        <a id="pvDl" class="btn small" href="#" download>Unduh</a>
         <button id="previewClose" class="btn ghost small" type="button">Tutup</button>
       </div>
     </div>
@@ -173,6 +190,18 @@
         <span><b>Nama perangkat ini</b><small id="myName">-</small></span>
         <button id="renameBtn" class="btn small" type="button">Ubah</button>
       </div>
+      <div class="mrow theme-row">
+        <span><b>Tampilan</b><small>Mode gelap lebih nyaman di malam hari.</small></span>
+        <div class="seg seg-text" role="group" aria-label="Tampilan">
+          <button type="button" data-theme-set="system">Ikuti perangkat</button>
+          <button type="button" data-theme-set="light">Terang</button>
+          <button type="button" data-theme-set="dark">Gelap</button>
+        </div>
+      </div>
+      <label class="mrow" id="shrinkRow">
+        <span><b>Kecilkan foto ke bawah <span id="shrinkKB">512</span> KB</b><small>Matikan untuk resolusi penuh, mis. foto liburan.</small></span>
+        <input id="shrinkPhotos" type="checkbox" checked>
+      </label>
       <div class="mrow">
         <span><b>Keluar</b><small>Perlu PIN untuk masuk lagi.</small></span>
         <button id="logout" class="btn small danger" type="button">Keluar</button>
@@ -188,25 +217,6 @@
         <button id="rootFill" class="btn ghost" type="button">Isi folder dulu</button>
         <button id="rootGo" class="btn primary" type="button">Kirim tanpa folder</button>
       </div>
-    </div>
-  </dialog>
-
-  <dialog id="allDlg" class="all-dlg">
-    <div class="dlg-body">
-      <div class="all-head">
-        <h3>Semua folder</h3>
-        <div class="seg" role="group" aria-label="Tampilan">
-          <button id="viewList" type="button" class="btn small" aria-pressed="true" title="Tampilan daftar" aria-label="Tampilan daftar">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
-          </button>
-          <button id="viewGrid" type="button" class="btn small" aria-pressed="false" title="Tampilan kotak" aria-label="Tampilan kotak">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
-          </button>
-        </div>
-        <button id="allClose" class="btn ghost small" type="button">Tutup</button>
-      </div>
-      <input id="allSearch" type="search" placeholder="Cari folder" aria-label="Cari folder" autocomplete="off">
-      <ul id="allList" class="flist all-list"></ul>
     </div>
   </dialog>
 
@@ -226,6 +236,15 @@
       </div>
     </form>
   </dialog>
+
+  <dialog id="sortDlg" class="sheet">
+    <div class="dlg-body">
+      <h3>Urutkan</h3>
+      <div id="sortOpts" class="sort-opts" role="radiogroup" aria-label="Urutkan"></div>
+    </div>
+  </dialog>
+
+  <div id="menu" class="menu" role="menu" hidden></div>
 
   <script src="app.js"></script>
 </body>

@@ -35,6 +35,9 @@
   let foldersSig = '';
   let filesSig = '';
   let clipsSig = '';
+  let pcName = '';
+  let online = true;
+  let devInfo = { online: 0, devices: [] };
 
   // ---------- Util ----------
   const fmtSize = (b) => {
@@ -158,9 +161,26 @@
   }
 
   function setOnline(ok) {
-    const dot = $('#dot');
-    dot.classList.toggle('off', !ok);
-    dot.title = ok ? 'Terhubung ke PC' : 'Terputus dari PC';
+    online = ok;
+    $('#dot').classList.toggle('off', !ok);
+    renderStatus();
+  }
+
+  const pcLabel = () => (isOnPc ? 'PC ini' : (pcName || 'PC'));
+
+  // Baris status di bawah judul: koneksi + jumlah perangkat
+  function renderStatus() {
+    const t = $('#statusText');
+    if (!online) { t.textContent = 'Terputus dari ' + pcLabel() + ' · cek Wi-Fi'; return; }
+    const n = devInfo.online || 0;
+    t.textContent = isOnPc ? `${n} perangkat terhubung` : `Terhubung ke ${pcLabel()}`;
+  }
+
+  function setTitle() {
+    const where = isOnPc ? 'PC ini' : pcLabel();
+    const page = route.type === 'send' ? 'Kirim ke ' + where : route.type === 'more' ? 'Hubungkan' : 'File di ' + where;
+    $('#pageTitle').textContent = page;
+    document.title = page + ' · DropBridge';
   }
 
   // ---------- Layar ----------
@@ -221,11 +241,15 @@
       const d = await r.json();
       urls = d.urls || [];
       if (d.this_pc) isOnPc = true;
+      if (d.pc_name) pcName = d.pc_name;
       maxMB = d.max_upload_mb || maxMB;
       if (typeof d.photo_max_kb === 'number') photoMaxKB = d.photo_max_kb;
       $('#shrinkKB').textContent = photoMaxKB;
-      for (const e of $$('.shrink-opt')) e.hidden = photoMaxKB <= 0;
+      $('#shrinkRow').hidden = photoMaxKB <= 0;
+      renderShrink();
       renderAddr();
+      setTitle();
+      renderStatus();
     } catch { /* tidak kritis */ }
   }
 
@@ -340,6 +364,8 @@
     }
     $('#homeView').hidden = !home;
     $('#folderView').hidden = !inFolder();
+    closeMenu();
+    setTitle();
     window.scrollTo(0, 0);
     if (route.type === 'folder') {
       setTarget(route.name);
@@ -349,10 +375,7 @@
       const root = route.type === 'root';
       $('#fvTitle').textContent = root ? 'Tanpa folder' : route.name;
       $('#fvMeta').textContent = '';
-      $('#fvZip').hidden = root;
-      $('#fvRename').hidden = root;
-      $('#fvDelete').hidden = root;
-      if (!root) $('#fvZip').href = '/api/folders/' + enc(route.name) + '/zip';
+      $('#fvMenu').hidden = root;
       $('#grid').replaceChildren();
       loadFiles().catch(() => {});
     } else if (home) {
@@ -360,6 +383,8 @@
     } else if (route.type === 'more') {
       $('#qrOff').hidden = !!urls.length;
       renderDevices();
+    } else if (route.type === 'send') {
+      loadRecent().catch(() => {});
     }
   }
 
@@ -375,24 +400,12 @@
     rootInfo = d.root || rootInfo;
     if (sig !== foldersSig) {
       foldersSig = sig;
-      $('#folderCount').textContent = '';
-      $('#allCount').textContent = folders.length || '';
-      if ($('#allDlg').open) renderAll();
       sendCombo.updateHint();
       renderChips();
       if (route.type === 'home') renderHome();
     }
   }
 
-  function folderRow(href, name, count, size, modified) {
-    return el('li', { class: 'frow' },
-      el('a', { class: 'frow-main', href },
-        el('div', { class: 'ext', 'data-kind': 'folder' }),
-        el('div', { class: 'meta' },
-          el('div', { class: 'name', text: name, title: name }),
-          el('div', { class: 'sub', text: `${count} file · ${fmtSize(size)}` + (modified ? ' · ' + fmtTime(modified) : '') })),
-        el('span', { class: 'chev', text: '›' })));
-  }
 
   const RECENT_CHIPS = 3;
 
@@ -411,64 +424,189 @@
     }
   }
 
+  // ---------- Ikon kecil ----------
+  const svg = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
+  const IC = {
+    dots: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
+    folder: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    up: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>',
+    down: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><path d="M6 11l6 6 6-6"/><path d="M4 20h16"/></svg>',
+    move: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M10 13h6M13 10l3 3-3 3"/></svg>',
+    edit: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+    trash: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+    share: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>',
+    check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
+    play: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
+  };
+
+  // ---------- Menu titik tiga ----------
+  let menuFrom = null;
+  function closeMenu() {
+    const m = $('#menu');
+    if (m.hidden) return;
+    m.hidden = true;
+    m.replaceChildren();
+    if (menuFrom) { menuFrom.setAttribute('aria-expanded', 'false'); menuFrom.focus({ preventScroll: true }); }
+    menuFrom = null;
+  }
+  // items: [{ label, icon, onclick, danger, href, download }]
+  function openMenu(btn, items) {
+    if (menuFrom === btn) { closeMenu(); return; }
+    closeMenu();
+    const m = $('#menu');
+    for (const it of items) {
+      const node = el(it.href ? 'a' : 'button', {
+        role: 'menuitem', class: 'mi' + (it.danger ? ' danger' : ''),
+        type: it.href ? null : 'button', href: it.href || null, download: it.download || null,
+        onclick: () => { closeMenu(); if (it.onclick) it.onclick(); },
+      }, svg(it.icon), el('span', { text: it.label }));
+      m.append(node);
+    }
+    m.hidden = false;
+    menuFrom = btn;
+    btn.setAttribute('aria-expanded', 'true');
+    const r = btn.getBoundingClientRect();
+    const w = m.offsetWidth, h = m.offsetHeight;
+    let left = Math.min(window.innerWidth - w - 8, r.right - w);
+    let top = r.bottom + 4;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);
+    m.style.left = Math.max(8, left) + 'px';
+    m.style.top = top + 'px';
+    const first = $('.mi', m);
+    if (first) first.focus({ preventScroll: true });
+  }
+  document.addEventListener('pointerdown', (e) => {
+    if (!$('#menu').hidden && !e.target.closest('#menu') && !(menuFrom && menuFrom.contains(e.target))) closeMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if ($('#menu').hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const all = $$('.mi', $('#menu'));
+      const i = all.indexOf(document.activeElement);
+      all[(i + (e.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length].focus();
+    }
+  });
+  window.addEventListener('resize', closeMenu);
+  window.addEventListener('scroll', closeMenu, { passive: true });
+
+  // ---------- Urutkan ----------
+  const SORTS = {
+    folder: [['new', 'Terbaru diubah'], ['old', 'Terlama diubah'], ['az', 'Nama A–Z'], ['za', 'Nama Z–A'], ['big', 'Ukuran terbesar']],
+    file: [['new', 'Terbaru diambil'], ['old', 'Terlama diambil'], ['az', 'Nama A–Z'], ['za', 'Nama Z–A'], ['big', 'Ukuran terbesar']],
+  };
+  const pref = {
+    folderSort: store.get('db_fsort') || 'new',
+    fileSort: store.get('db_gsort') || 'new',
+    folderView: store.get('db_allview') === 'grid' ? 'grid' : 'list',
+    fileView: store.get('db_gview') === 'list' ? 'list' : 'grid', // isi folder: foto paling enak dilihat sebagai kotak
+  };
+  const coll = new Intl.Collator('id', { numeric: true, sensitivity: 'base' });
+  function sortBy(arr, how) {
+    const a = arr.slice();
+    if (how === 'az') a.sort((x, y) => coll.compare(x.name, y.name));
+    else if (how === 'za') a.sort((x, y) => coll.compare(y.name, x.name));
+    else if (how === 'big') a.sort((x, y) => y.size - x.size);
+    else if (how === 'old') a.sort((x, y) => x.modified - y.modified || coll.compare(x.name, y.name));
+    else a.sort((x, y) => y.modified - x.modified || coll.compare(x.name, y.name));
+    return a;
+  }
+  const sortName = (kind, key) => (SORTS[kind].find((o) => o[0] === key) || SORTS[kind][0])[1];
+
+  let sortKind = 'folder';
+  function openSort(kind) {
+    sortKind = kind;
+    const cur = kind === 'folder' ? pref.folderSort : pref.fileSort;
+    $('#sortOpts').replaceChildren(...SORTS[kind].map(([key, label]) => el('button', {
+      type: 'button', role: 'radio', class: 'sort-opt', 'aria-checked': key === cur ? 'true' : 'false',
+      onclick: () => {
+        if (sortKind === 'folder') { pref.folderSort = key; store.set('db_fsort', key); renderHome(); }
+        else { pref.fileSort = key; store.set('db_gsort', key); renderGrid(); }
+        syncTools();
+        $('#sortDlg').close();
+      },
+    }, el('span', { text: label }), key === cur ? svg(IC.check) : '')));
+    $('#sortDlg').showModal();
+    const on = $('.sort-opt[aria-checked="true"]', $('#sortOpts'));
+    if (on) on.focus();
+  }
+  $('#sortDlg').addEventListener('click', (e) => { if (e.target.id === 'sortDlg') e.target.close(); });
+  $('#fSort').addEventListener('click', () => openSort('folder'));
+  $('#gSort').addEventListener('click', () => openSort('file'));
+
+  function syncTools() {
+    $('.sort-label', $('#fSort')).textContent = sortName('folder', pref.folderSort);
+    $('.sort-label', $('#gSort')).textContent = sortName('file', pref.fileSort);
+    $('#fgList').setAttribute('aria-pressed', pref.folderView === 'list');
+    $('#fgGrid').setAttribute('aria-pressed', pref.folderView === 'grid');
+    $('#gvList').setAttribute('aria-pressed', pref.fileView === 'list');
+    $('#gvGrid').setAttribute('aria-pressed', pref.fileView === 'grid');
+    $('#folderList').classList.toggle('grid-view', pref.folderView === 'grid');
+    $('#grid').classList.toggle('list-view', pref.fileView === 'list');
+  }
+  const setFolderView = (v) => { pref.folderView = v; store.set('db_allview', v); syncTools(); renderHome(); };
+  const setFileView = (v) => { pref.fileView = v; store.set('db_gview', v); syncTools(); renderGrid(); };
+  $('#fgList').addEventListener('click', () => setFolderView('list'));
+  $('#fgGrid').addEventListener('click', () => setFolderView('grid'));
+  $('#gvList').addEventListener('click', () => setFileView('list'));
+  $('#gvGrid').addEventListener('click', () => setFileView('grid'));
+  syncTools();
+
+  // ---------- Daftar folder ----------
+  // Kirim langsung ke folder tertentu: pilih file, lalu lihat kemajuannya di halaman Kirim.
+  let pickFor = null;
+  function sendTo(folder) {
+    pickFor = folder;
+    $('#picker2').click();
+  }
+  $('#picker2').addEventListener('change', (e) => {
+    const list = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!list.length || pickFor === null) return;
+    const folder = pickFor;
+    pickFor = null;
+    if (folder) { setTarget(folder); store.set('db_target', folder); }
+    location.hash = '#/';
+    enqueue(list, folder);
+  });
+
+  function folderMenu(f, btn) {
+    const items = [{ label: 'Kirim ke sini', icon: IC.up, onclick: () => sendTo(f.name) }];
+    if (!f.root) items.push({ label: 'Unduh semua (ZIP)', icon: IC.down, href: '/api/folders/' + enc(f.name) + '/zip', download: f.name + '.zip' });
+    openMenu(btn, items);
+  }
+
+  function folderItem(f) {
+    const href = f.root ? '#/root' : '#/f/' + enc(f.name);
+    const sub = `${f.count} file · ${fmtSize(f.size)}` + (f.modified && !f.root ? ' · ' + fmtTime(f.modified) : '');
+    const dots = el('button', {
+      type: 'button', class: 'dots', 'aria-label': 'Pilihan untuk ' + f.name, 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+      onclick: (e) => folderMenu(f, e.currentTarget),
+    }, svg(IC.dots));
+    return el('li', { class: 'frow' + (f.root ? ' root' : '') },
+      el('a', { class: 'frow-main', href },
+        el('span', { class: 'fic' }, svg(IC.folder)),
+        el('span', { class: 'meta' },
+          el('span', { class: 'name', text: f.name, title: f.name }),
+          el('span', { class: 'sub', text: sub }))),
+      dots);
+  }
+
   function renderHome() {
     const list = $('#folderList');
     const q = $('#fSearch').value.trim().toLowerCase();
     list.replaceChildren();
-    for (const f of folders.filter((x) => !q || x.name.toLowerCase().includes(q))) {
-      list.append(folderRow('#/f/' + enc(f.name), f.name, f.count, f.size, f.modified));
-    }
+    const shown = sortBy(folders.filter((x) => !q || x.name.toLowerCase().includes(q)), pref.folderSort);
+    for (const f of shown) list.append(folderItem(f));
     if (rootInfo.count > 0 && (!q || 'tanpa folder'.includes(q))) {
-      list.append(folderRow('#/root', 'Tanpa folder', rootInfo.count, rootInfo.size, rootInfo.modified));
+      list.append(folderItem({ name: 'Tanpa folder', root: true, count: rootInfo.count, size: rootInfo.size, modified: rootInfo.modified }));
     }
     if (!list.children.length) {
       list.append(el('li', { class: 'empty', text: q ? 'Tidak ada folder yang cocok.' : 'Belum ada folder. Kirim file ke sebuah nama folder dan folder itu akan dibuat otomatis.' }));
     }
   }
   $('#fSearch').addEventListener('input', renderHome);
-
-  // ---------- Semua folder (cari dan pilih tujuan) ----------
-  function renderAll() {
-    const list = $('#allList');
-    const q = $('#allSearch').value.trim().toLowerCase();
-    list.replaceChildren();
-    const shown = folders.filter((f) => !q || f.name.toLowerCase().includes(q));
-    for (const f of shown) {
-      list.append(el('li', { class: 'frow pick-row' },
-        el('a', { class: 'frow-main', href: '#/f/' + enc(f.name), onclick: () => $('#allDlg').close() },
-          el('div', { class: 'ext', 'data-kind': 'folder' }),
-          el('div', { class: 'meta' },
-            el('div', { class: 'name', text: f.name, title: f.name }),
-            el('div', { class: 'sub', text: `${f.count} file · ${fmtSize(f.size)}` + (f.modified ? ' · ' + fmtTime(f.modified) : '') }))),
-        el('button', {
-          type: 'button', class: 'btn small', text: 'Kirim ke sini', title: 'Jadikan folder tujuan kiriman',
-          onclick: () => { setTarget(f.name); store.set('db_target', f.name); $('#allDlg').close(); toast('Tujuan: ' + f.name); },
-        })));
-    }
-    if (!list.children.length) list.append(el('li', { class: 'empty', text: q ? 'Tidak ada folder yang cocok.' : 'Belum ada folder.' }));
-  }
-
-  let allView = store.get('db_allview') === 'grid' ? 'grid' : 'list';
-  function applyAllView() {
-    $('#allList').classList.toggle('grid-view', allView === 'grid');
-    $('#folderList').classList.toggle('grid-view', allView === 'grid');
-    for (const id of ['#viewList', '#fgList']) $(id).setAttribute('aria-pressed', allView === 'list');
-    for (const id of ['#viewGrid', '#fgGrid']) $(id).setAttribute('aria-pressed', allView === 'grid');
-  }
-  for (const id of ['#viewList', '#fgList']) $(id).addEventListener('click', () => { allView = 'list'; store.set('db_allview', allView); applyAllView(); });
-  for (const id of ['#viewGrid', '#fgGrid']) $(id).addEventListener('click', () => { allView = 'grid'; store.set('db_allview', allView); applyAllView(); });
-  applyAllView();
-
-  function openAll() {
-    applyAllView();
-    $('#allSearch').value = '';
-    renderAll();
-    $('#allDlg').showModal();
-    $('#allSearch').focus();
-  }
-  $('#allBtn').addEventListener('click', openAll);
-  $('#allClose').addEventListener('click', () => $('#allDlg').close());
-  $('#allSearch').addEventListener('input', renderAll);
 
   // ---------- Isi folder ----------
   async function loadFiles() {
@@ -491,6 +629,28 @@
     if (sig !== filesSig) { filesSig = sig; renderGrid(); }
   }
 
+  const fileUrl = (f, folder) => '/api/files/' + enc(f.name) + '?folder=' + enc(folder);
+
+  function fileMenu(f, btn) {
+    const folder = curFolder();
+    const items = [{ label: 'Unduh', icon: IC.down, href: fileUrl(f, folder), download: f.name }];
+    if (navigator.canShare && window.isSecureContext) {
+      items.push({ label: 'Bagikan', icon: IC.share, onclick: () => shareFile(f) });
+    }
+    items.push({ label: 'Pindah ke folder lain', icon: IC.move, onclick: () => openMove(f) });
+    items.push({ label: 'Hapus', icon: IC.trash, danger: true, onclick: () => removeFile(f) });
+    openMenu(btn, items);
+  }
+
+  async function shareFile(f) {
+    try {
+      const r = await fetch(fileUrl(f, curFolder()), { credentials: 'same-origin' });
+      const file = new File([await r.blob()], f.name, { type: f.mime || 'application/octet-stream' });
+      if (navigator.canShare({ files: [file] })) await navigator.share({ files: [file] });
+      else toast('HP ini tidak bisa membagikan file dari browser', 'err');
+    } catch (e) { if (e && e.name !== 'AbortError') toast('Gagal membagikan', 'err'); }
+  }
+
   function renderGrid() {
     const grid = $('#grid');
     grid.replaceChildren();
@@ -501,30 +661,33 @@
       return;
     }
     const folder = curFolder();
-    for (const f of files) {
-      const url = '/api/files/' + enc(f.name) + '?folder=' + enc(folder);
-      const badge = () => el('div', { class: 'ext big', 'data-kind': f.kind, text: extOf(f.name) });
-      const main = el('button', {
-        type: 'button',
-        class: 'tile-main',
-        title: f.name,
-        onclick: () => (f.previewable ? openPreview(f) : (location.href = url)),
-      });
+    const asList = pref.fileView === 'list';
+    for (const f of sortBy(files, pref.fileSort)) {
+      const url = fileUrl(f, folder);
+      const badge = () => el('span', { class: 'ext big', 'data-kind': f.kind, text: extOf(f.name) });
+      const pic = el('span', { class: 'pic' });
       if (f.thumb) {
-        const img = el('img', { class: 'thumb', loading: 'lazy', alt: f.name, src: `/api/files/${enc(f.name)}/thumb?folder=${enc(folder)}` });
+        const img = el('img', { class: 'thumb', loading: 'lazy', alt: '', src: `/api/files/${enc(f.name)}/thumb?folder=${enc(folder)}` });
         img.addEventListener('error', () => img.replaceWith(badge()), { once: true });
-        main.append(img);
+        pic.append(img);
       } else {
-        main.append(badge());
+        pic.append(badge());
       }
-      grid.append(el('div', { class: 'tile' },
-        main,
-        el('div', { class: 'tile-name', text: f.name, title: f.name }),
-        el('div', { class: 'tile-sub', text: fmtSize(f.size) + ' · ' + fmtTime(f.modified) }),
-        el('div', { class: 'tile-actions' },
-          el('a', { class: 'btn', href: url, download: f.name, text: 'Unduh' }),
-          el('button', { class: 'btn', type: 'button', text: 'Pindah', onclick: () => openMove(f) }),
-          el('button', { class: 'btn danger', type: 'button', text: 'Hapus', onclick: () => removeFile(f) }))));
+      if (f.kind === 'video') pic.append(el('span', { class: 'play' }, svg(IC.play)));
+      const open = () => (f.previewable ? openPreview(f) : (location.href = url));
+      const main = el('button', { type: 'button', class: 'tile-main', title: f.name, 'aria-label': f.name, onclick: open }, pic);
+      if (asList) {
+        main.append(el('span', { class: 'meta' },
+          el('span', { class: 'name', text: f.name }),
+          el('span', { class: 'sub', text: fmtSize(f.size) + ' · ' + fmtTime(f.modified) })));
+      } else if (!f.thumb) {
+        main.append(el('span', { class: 'tile-name', text: f.name }));
+      }
+      const dots = el('button', {
+        type: 'button', class: 'dots', 'aria-label': 'Pilihan untuk ' + f.name, 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+        onclick: (e) => fileMenu(f, e.currentTarget),
+      }, svg(IC.dots));
+      grid.append(el('div', { class: 'tile' + (f.thumb ? ' has-thumb' : '') }, main, dots));
     }
   }
 
@@ -538,7 +701,17 @@
   }
 
   // ---------- Aksi folder ----------
-  $('#fvRename').addEventListener('click', async () => {
+  $('#fvSend').addEventListener('click', () => sendTo(curFolder()));
+  $('#fvMenu').addEventListener('click', (e) => {
+    if (route.type !== 'folder') return;
+    openMenu(e.currentTarget, [
+      { label: 'Unduh semua (ZIP)', icon: IC.down, href: '/api/folders/' + enc(route.name) + '/zip', download: route.name + '.zip' },
+      { label: 'Ganti nama', icon: IC.edit, onclick: renameFolder },
+      { label: 'Hapus folder', icon: IC.trash, danger: true, onclick: deleteFolder },
+    ]);
+  });
+
+  async function renameFolder() {
     const old = route.name;
     const next = prompt('Nama baru untuk folder ini:', old);
     if (next == null || !next.trim() || next.trim() === old) return;
@@ -549,9 +722,9 @@
       location.hash = '#/f/' + enc(d.name);
       loadFolders().catch(() => {});
     } catch (e) { toast(e.message, 'err'); }
-  });
+  }
 
-  $('#fvDelete').addEventListener('click', async () => {
+  async function deleteFolder() {
     const name = route.name;
     let count = files.length;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -575,7 +748,7 @@
         return;
       }
     }
-  });
+  }
 
   // ---------- Pratinjau ----------
   let pvList = [];
@@ -598,6 +771,8 @@
     else if (f.kind === 'audio') node = el('audio', { src, controls: true });
     else node = el('iframe', { src, title: f.name });
     $('#previewTitle').textContent = `${f.name}  (${pvIndex + 1}/${pvList.length})`;
+    $('#pvDl').href = fileUrl(f, curFolder());
+    $('#pvDl').setAttribute('download', f.name);
     $('#previewBody').replaceChildren(node);
     $('#pvPrev').disabled = pvIndex === 0;
     $('#pvNext').disabled = pvIndex >= pvList.length - 1;
@@ -661,6 +836,8 @@
   // ---------- Unggah ----------
   const queue = [];
   let uploading = false;
+  // Ringkasan kiriman yang sedang berjalan ("Mengirim 3 dari 8 ke ...")
+  const batch = { total: 0, done: 0, folder: '' };
 
   function targetFolder() {
     const raw = $('#folderInput').value;
@@ -706,7 +883,9 @@
         continue;
       }
       queue.push({ file, row, folder, shrink: $('#shrinkPhotos').checked });
+      batch.total++;
     }
+    syncUpCard();
     runQueue();
     return true;
   }
@@ -778,7 +957,10 @@
     $('#upNote').hidden = false;
     while (queue.length) {
       const job = queue.shift();
+      batch.folder = job.folder;
+      renderSum();
       const r = await uploadOne(job);
+      if (r === 'ok' || r === 'fail') { batch.done++; renderSum(); }
       if (r === 'auth') {
         // Sesi habis: simpan sisa antrean, minta login, lalu lanjut sendiri setelah masuk.
         queue.unshift(job);
@@ -793,7 +975,19 @@
     }
     uploading = false;
     $('#upNote').hidden = true;
-    if (loggedIn) refresh();
+    renderSum();
+    if (!queue.length) { batch.total = batch.done = 0; }
+    if (loggedIn) { refresh(); loadRecent().catch(() => {}); }
+  }
+
+  function renderSum() {
+    const busy = uploading || queue.length;
+    const n = Math.min(batch.total, batch.done + (busy ? 1 : 0));
+    $('#upSum').textContent = busy && batch.total
+      ? `Mengirim ${n} dari ${batch.total} ke ${batch.folder || 'Tanpa folder'}`
+      : (batch.total ? `${batch.done} file selesai` : '');
+    $('#upSumBar').style.width = batch.total ? Math.round((batch.done / batch.total) * 100) + '%' : '0%';
+    $('.sum-bar').hidden = !batch.total || batch.total < 2;
   }
 
   // Peringatan bila halaman ditutup saat masih mengirim.
@@ -865,7 +1059,7 @@
             const sec = (ms) => (ms / 1000).toFixed(1) + ' dtk';
             const dupe = d.saved && d.saved[0] && d.saved[0].duplicate;
             if (dupe) state.textContent = `Sudah ada di ${real || 'Tanpa folder'} (${d.saved[0].name}), tidak disimpan ulang`;
-            else state.textContent = `Selesai · ${fmtSize(file.size)} → ${real || 'Tanpa folder'}${tSent && tSent > t0 ? ' · rata-rata ' + fmtSpeed(file.size * 1000 / (tSent - t0)) : ''} · kirim ${sec((tSent || now) - t0)}, tunggu ${sec(tSent ? now - tSent : 0)}` + (typeof d.took === 'number' ? `, PC simpan ${d.took.toFixed(2)} dtk` : '');
+            else state.textContent = `Selesai · ${fmtSize(file.size)} · ${sec(now - t0)}` + (tSent && tSent - t0 > 300 ? ' · ' + fmtSpeed(file.size * 1000 / (tSent - t0)) : '');
             setTimeout(() => { row.remove(); syncUpCard(); }, 15000);
             if (real) store.set('db_target', real);
             if (real && $('#folderInput').value.trim() && cleanFolder($('#folderInput').value).toLowerCase() === folder.toLowerCase()) {
@@ -889,15 +1083,26 @@
     });
   }
 
-  $('#pick').addEventListener('click', () => {
+  function pickWith(input) {
     if (!targetFolder()) {
       toast('Isi nama folder tujuan dulu', 'err');
       $('#folderInput').focus();
       return;
     }
-    $('#picker').click();
-  });
+    input.click();
+  }
+  $('#pick').addEventListener('click', () => pickWith($('#picker')));
+  $('#pick2').addEventListener('click', () => pickWith($('#picker')));
+  // Foto langsung: kamera HP terbuka lewat browser, hasilnya langsung dikirim.
+  $('#snap').addEventListener('click', () => pickWith($('#camera')));
   $('#picker').addEventListener('change', (e) => { enqueue(e.target.files); e.target.value = ''; });
+  $('#camera').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const ext = (f.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    enqueue([/^image\.(jpe?g|png)$/i.test(f.name) || !f.name ? new File([f], `foto-${stamp()}.${ext}`, { type: f.type, lastModified: f.lastModified }) : f]);
+  });
   $('#folderInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && $('#suggest').hidden) { e.preventDefault(); $('#pick').click(); }
   });
@@ -983,15 +1188,33 @@
 
   // ---------- Mode kirim: File / Teks ----------
   function syncUpCard() {
-    $('#upCard').hidden = !$('#uploads').children.length || !!$('#sendFile').hidden;
+    const has = !!$('#uploads').children.length;
+    $('#upCard').hidden = !has;
+    if (!has && !uploading && !queue.length) { batch.total = batch.done = 0; }
+    renderSum();
   }
   function setMode(m) {
     $('#sendFile').hidden = m !== 'file';
     $('#sendText').hidden = m !== 'text';
-    $('#upCard').hidden = m !== 'file' || !$('#uploads').children.length;
+    if (m === 'text') $('#clipText').focus();
   }
   $('#modeFile').addEventListener('click', () => setMode('file'));
   $('#modeText').addEventListener('click', () => setMode('text'));
+
+  // ---------- Tampilan terang / gelap ----------
+  function applyTheme(t) {
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    else delete document.documentElement.dataset.theme;
+    for (const b of $$('[data-theme-set]')) b.setAttribute('aria-pressed', b.dataset.themeSet === (t || 'system') ? 'true' : 'false');
+    const dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const meta = $('meta[name="theme-color"]');
+    if (meta) meta.content = dark ? '#0a1a18' : '#0f766e';
+  }
+  for (const b of $$('[data-theme-set]')) {
+    b.addEventListener('click', () => { store.set('db_theme', b.dataset.themeSet); applyTheme(b.dataset.themeSet); });
+  }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.get('db_theme')));
+  applyTheme(store.get('db_theme'));
 
   // ---------- Pengaturan (ikon di kanan atas) ----------
   $('#setBtn').addEventListener('click', () => { $('#myName').textContent = myName || 'Belum diberi nama'; $('#setDlg').showModal(); });
@@ -1003,6 +1226,7 @@
       const jobs = [loadFolders(), loadClips()];
       if (inFolder()) jobs.push(loadFiles());
       if (route.type === 'more') jobs.push(renderDevices());
+      if (route.type === 'send') jobs.push(loadRecent());
       await Promise.all(jobs);
       setOnline(true);
     } catch (e) {
@@ -1010,13 +1234,42 @@
     }
   }
 
-  const shrinkBoxes = [$('#shrinkPhotos')];
-  for (const cb of shrinkBoxes) {
-    cb.checked = store.get('db_shrink') !== '0';
-    cb.addEventListener('change', (e) => {
-      store.set('db_shrink', e.target.checked ? '1' : '0');
-      for (const o of shrinkBoxes) o.checked = e.target.checked;
-    });
+  // Kecilkan foto: diatur dari Pengaturan, ringkasannya tampil di halaman Kirim.
+  function renderShrink() {
+    const on = $('#shrinkPhotos').checked;
+    $('#shrinkLine').hidden = photoMaxKB <= 0;
+    $('#shrinkText').textContent = on ? `Foto dikecilkan ≤ ${photoMaxKB} KB` : 'Foto dikirim resolusi penuh';
+  }
+  $('#shrinkPhotos').checked = store.get('db_shrink') !== '0';
+  $('#shrinkPhotos').addEventListener('change', (e) => { store.set('db_shrink', e.target.checked ? '1' : '0'); renderShrink(); });
+  $('#shrinkEdit').addEventListener('click', () => $('#setBtn').click());
+  renderShrink();
+
+  // ---------- Masuk terakhir ----------
+  let recentSig = '';
+  async function loadRecent() {
+    if (route.type !== 'send') return;
+    const d = await api('/api/files/recent?limit=' + (window.innerWidth >= 960 ? 6 : 4));
+    const sig = JSON.stringify(d.files) + Math.floor(Date.now() / 60000);
+    if (sig === recentSig) return;
+    recentSig = sig;
+    const list = $('#recentList');
+    list.replaceChildren(...d.files.map((f) => {
+      const pic = el('span', { class: 'pic' });
+      if (f.thumb) {
+        const img = el('img', { class: 'thumb', loading: 'lazy', alt: '', src: `/api/files/${enc(f.name)}/thumb?folder=${enc(f.folder)}` });
+        img.addEventListener('error', () => img.replaceWith(el('span', { class: 'ext', 'data-kind': f.kind, text: extOf(f.name) })), { once: true });
+        pic.append(img);
+      } else pic.append(el('span', { class: 'ext', 'data-kind': f.kind, text: extOf(f.name) }));
+      return el('li', {},
+        el('a', { class: 'rrow', href: f.folder ? '#/f/' + enc(f.folder) : '#/root' },
+          pic,
+          el('span', { class: 'meta' },
+            el('span', { class: 'name', text: f.name, title: f.name }),
+            el('span', { class: 'sub', text: (f.folder || 'Tanpa folder') + ' · ' + fmtTime(f.modified) })),
+          el('span', { class: 'ok', title: 'Sudah di PC' }, svg(IC.check))));
+    }));
+    $('#recentCard').hidden = !d.files.length;
   }
 
   // ---------- Identitas perangkat ----------
@@ -1070,8 +1323,14 @@
 
   async function updateDevCount() {
     try {
-      const d = await api('/api/devices');
-      $('#devCount').textContent = d.online + (d.online === 1 ? ' perangkat' : ' perangkat');
+      devInfo = await api('/api/devices');
+      renderStatus();
+      // Di PC: kartu kecil perangkat yang sedang terhubung di halaman Kirim
+      const others = devInfo.devices.filter((v) => !v.current && v.online);
+      $('#devCard').hidden = !isOnPc;
+      $('#devChips').replaceChildren(...(others.length
+        ? others.map((v) => el('span', { class: 'chip dev-chip' }, el('span', { class: 'dev-dot on' }), v.name))
+        : [el('span', { class: 'muted small', text: 'Belum ada HP yang terhubung.' })]));
     } catch { /* abaikan */ }
   }
 
@@ -1100,7 +1359,7 @@
     try { const r = await api('/api/devices/revoke-others', { method: 'POST' }); toast(r.revoked + ' perangkat dikeluarkan'); renderDevices(); updateDevCount(); }
     catch (err) { toast(err.message, 'err'); }
   });
-  setInterval(() => { if (loggedIn && !document.hidden) updateDevCount(); }, 20000);
+  setInterval(() => { if (loggedIn && !document.hidden) updateDevCount(); }, 15000);
 
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();

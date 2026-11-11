@@ -121,6 +121,12 @@ def _zip_iter(paths) -> Iterator[bytes]:
         yield data
 
 
+def arrived(st) -> float:
+    """Kapan file masuk ke PC. mtime bisa diset ke waktu foto diambil, jadi pakai juga waktu dibuat."""
+    born = getattr(st, "st_birthtime", None) or st.st_ctime
+    return max(st.st_mtime, born)
+
+
 class LocalStorage:
     def __init__(self, root: Path) -> None:
         root.mkdir(parents=True, exist_ok=True)
@@ -198,7 +204,7 @@ class LocalStorage:
                     st = e.stat()
                     count += 1
                     size += st.st_size
-                    latest = max(latest, st.st_mtime)
+                    latest = max(latest, arrived(st))
         except OSError:
             pass
         return count, size, latest
@@ -209,9 +215,10 @@ class LocalStorage:
             for e in it:
                 if e.name.startswith(".") or not e.is_dir(follow_symlinks=False):
                     continue
-                count, size, _ = self._scan(Path(e.path))
+                count, size, latest = self._scan(Path(e.path))
+                # waktu terakhir = file terbaru di dalamnya (atau folder itu sendiri bila kosong)
                 folders.append(
-                    {"name": e.name, "count": count, "size": size, "modified": e.stat().st_mtime}
+                    {"name": e.name, "count": count, "size": size, "modified": max(latest, e.stat().st_mtime)}
                 )
         folders.sort(key=lambda f: f["modified"], reverse=True)  # aktivitas terakhir di atas
         count, size, latest = self._scan(self.root)
@@ -313,6 +320,40 @@ class LocalStorage:
                 )
         items.sort(key=lambda i: (i["modified"], i["name"].lower()))  # urutan waktu (foto sesuai urutan diambil)
         return items
+
+    def recent_files(self, limit: int = 8) -> list:
+        """File terbaru dari semua folder (untuk "Masuk terakhir" di halaman Kirim)."""
+        found = []
+
+        def take(d: Path, folder: str) -> None:
+            try:
+                with os.scandir(d) as it:
+                    for e in it:
+                        if e.name.startswith(".") or not e.is_file(follow_symlinks=False):
+                            continue
+                        try:
+                            st = e.stat()
+                        except OSError:
+                            continue
+                        found.append((arrived(st), folder, e.name, st.st_size))
+            except OSError:
+                pass
+
+        take(self.root, "")
+        try:
+            with os.scandir(self.root) as it:
+                for e in it:
+                    if not e.name.startswith(".") and e.is_dir(follow_symlinks=False):
+                        take(Path(e.path), e.name)
+        except OSError:
+            pass
+        found.sort(reverse=True)
+        out = []
+        for mtime, folder, name, size in found[:limit]:
+            mime = guess_mime(name)
+            out.append({"folder": folder, "name": name, "size": size, "modified": mtime,
+                        "kind": kind_of(name, mime), "thumb": thumbs.thumbable(mime)})
+        return out
 
     def path_of(self, folder: str, name: str) -> Path:
         d = self._folder_dir(folder)

@@ -1,5 +1,6 @@
 """Aplikasi FastAPI: gabungkan router dan sajikan halaman web."""
 import io
+import socket
 import ipaddress
 
 from fastapi import FastAPI, Request
@@ -71,6 +72,7 @@ def info(request: Request):
     return {
         "this_pc": _from_this_pc(request),
         "name": "DropBridge",
+        "pc_name": socket.gethostname(),
         "urls": lan_urls(settings.port),
         "max_upload_mb": settings.max_upload_mb,
         "photo_max_kb": settings.photo_max_kb,
