@@ -3,7 +3,7 @@
 import os
 from PyInstaller.utils.hooks import collect_submodules
 
-datas = [("web", "web")]
+datas = [(os.path.join("..", "Web"), "web")]  # tampilan dari folder Web di sebelah PC-App
 apk = os.environ.get("DB_APK", "")
 if apk and os.path.isfile(apk):
     datas.append((apk, "apk"))  # APK Android ikut terpasang, HP bisa mengunduhnya dari laptop

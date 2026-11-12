@@ -1,7 +1,7 @@
 @echo off
 setlocal
-REM Membangun DropBridge PC menjadi installer: dist\DropBridge-Setup-<versi>.exe
-REM Versi diambil dari app\version.py. APK Android terbaru dari ..\dropbridge-android\dist ikut dibungkus.
+REM Membangun DropBridge PC menjadi installer: ..\Rilis\DropBridge-Setup-<versi>.exe
+REM Versi diambil dari app\version.py. APK Android terbaru di ..\Rilis (hasil Android-App\build_apk.bat) ikut dibungkus.
 REM Perlu: start.bat pernah dijalankan (membuat .venv) dan Inno Setup 6 (winget install JRSoftware.InnoSetup).
 REM Log build: build_exe_log.txt
 cd /d "%~dp0"
@@ -26,11 +26,11 @@ if errorlevel 1 goto gagal
 
 echo [2/4] Mencari APK Android...
 set "DB_APK="
-for /f "delims=" %%f in ('dir /b /o:d "..\dropbridge-android\dist\DropBridge-*.apk" 2^>nul') do set "DB_APK=%~dp0..\dropbridge-android\dist\%%f"
+for /f "delims=" %%f in ('dir /b /o:d "..\Rilis\DropBridge-*.apk" 2^>nul') do set "DB_APK=%~dp0..\Rilis\%%f"
 if defined DB_APK (
   echo       Ikut dibungkus: %DB_APK%
 ) else (
-  echo       Tidak ada APK di ..\dropbridge-android\dist. Installer dibuat tanpa APK.
+  echo       Tidak ada APK di folder Rilis. Jalankan Android-App\build_apk.bat dulu kalau mau ikut dibungkus.
 )
 
 echo [3/4] Membuat DropBridge.exe...
@@ -54,10 +54,10 @@ if not exist "%ISCC%" (
 )
 set "DB_VERSION=%VER%"
 "%ISCC%" /Qp installer\DropBridge.iss >> "%LOG%" 2>&1
-if not exist "dist\DropBridge-Setup-%VER%.exe" goto gagal
+if not exist "..\Rilis\DropBridge-Setup-%VER%.exe" goto gagal
 
 echo.
-echo BERHASIL. Installer versi %VER%: dist\DropBridge-Setup-%VER%.exe
+echo BERHASIL. Installer versi %VER% ada di folder Rilis: DropBridge-Setup-%VER%.exe
 pause
 exit /b 0
 

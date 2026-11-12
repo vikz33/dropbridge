@@ -1,29 +1,35 @@
+# Data pribadi tidak pernah ada di folder ini (tersimpan di %LOCALAPPDATA%\DropBridge
+# dan Documents\DropBridge). Baris di bawah hanya jaga-jaga.
+config.json
+data/
+shared/
+webview/
+
+# Hasil build (installer dan APK) - dibagikan lewat folder Rilis, bukan Git
+Rilis/
+build/
+dist/
+*.apk
+*.log
+build_exe_log.txt
+build_log.txt
+
 # Python
 .venv/
 __pycache__/
 *.pyc
 
-# Data pribadi (jangan diunggah)
-shared/
-data/
-config.json
-_dropbridge/
-
-# Hasil build_exe.bat
-build/
-dist/
-build_exe_log.txt
-
-# Repositori Android terpisah (taruh di luar folder ini)
-dropbridge-android/
-*.apk
+# Android / Gradle
+.gradle/
+local.properties
+*.jks
+*.keystore
+*.iml
 
 # Lain-lain
-*.log
+_*.tar
+_*.tar.gz
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-
-# Data jendela desktop
-webview/

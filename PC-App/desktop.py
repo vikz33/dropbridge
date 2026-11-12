@@ -160,7 +160,19 @@ def migrate_old_autostart() -> None:
         except OSError:
             pass
     elif autostart_on():
-        set_autostart(True)  # perbarui jalurnya (mis. setelah pindah dari start.bat ke .exe)
+        # Perbarui jalurnya (mis. folder kode dipindah, atau pindah dari start.bat ke .exe).
+        # Versi dari kode tidak menimpa autostart milik versi terpasang.
+        if FROZEN or "DropBridge.exe" not in _autostart_value():
+            set_autostart(True)
+
+
+def _autostart_value() -> str:
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            return str(winreg.QueryValueEx(k, "DropBridge")[0])
+    except OSError:
+        return ""
 
 
 # ---------- Aplikasi ----------

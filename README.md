@@ -3,6 +3,28 @@
 Kirim file dan teks antara PC dan HP lewat Wi-Fi yang sama. Tanpa kabel, tanpa scan QR,
 tanpa memasang aplikasi di HP. Cukup browser.
 
+## Isi folder ini
+
+```
+DropBridge/
+  Web/           tampilan (index.html, app.js, style.css), dipakai PC, browser HP, dan jendela desktop
+  PC-App/        server + jendela desktop + bahan installer (start.bat, build_exe.bat)
+  Android-App/   aplikasi Android (build_apk.bat)
+  Rilis/         hasil jadi untuk dibagikan: DropBridge-Setup-<versi>.exe dan DropBridge-<versi>.apk
+                 (tidak masuk Git)
+```
+
+Folder ini hanya berisi kode. Data pribadi disimpan di luar:
+
+| Apa | Di mana |
+|---|---|
+| File kiriman HP | `Documents\DropBridge` (bisa diganti, mis. ke OneDrive kantor, lewat **Ganti** di halaman Kirim) |
+| Pengaturan (PIN, folder) | `%LOCALAPPDATA%\DropBridge\config.json` |
+| Perangkat terhubung, riwayat teks, log | `%LOCALAPPDATA%\DropBridge\data` |
+
+Versi dari kode (`start.bat`) dan versi terpasang (`.exe`) memakai pengaturan yang sama, jadi PIN dan HP
+yang sudah terhubung tidak berbeda.
+
 ## Cara pakai
 
 **Pemakaian sehari-hari (versi terpasang):** pasang `DropBridge-Setup-<versi>.exe`, lalu buka **DropBridge** dari
@@ -14,16 +36,16 @@ Start Menu. Begitu dibuka, laptop langsung jadi server: HP bisa mengirim lewat W
 - Saat Windows menyala, DropBridge jalan diam-diam di ikon tray (pilihan di installer atau menu tray).
 - Dibuka lagi saat sudah jalan: jendela yang ada dimunculkan, tidak ada salinan kedua.
 - Notifikasi Windows saat file masuk ("4 file masuk ke TRHU-4134291 › 30-1"); klik ikon tray untuk membuka foldernya.
-- Pengaturan dan data ada di `%LOCALAPPDATA%\DropBridge`. Saat pertama dipasang, PIN, perangkat, dan folder penyimpanan
-  dari `C:\DropBridge` diimpor otomatis, jadi HP tidak perlu dihubungkan ulang.
+- Pengaturan dan data ada di `%LOCALAPPDATA%\DropBridge`. Pengaturan versi lama (sebelum 2.4.1, tersimpan di
+  `C:\DropBridge\config.json`) dipindahkan otomatis saat pertama jalan, jadi HP tidak perlu dihubungkan ulang.
 - Pertama kali dibuka (dan setelah update) muncul halaman **Selamat datang**: folder penyimpanan, QR untuk HP, dan QR
   untuk mengunduh aplikasi Android dari laptop ini.
 
 **Saat mengembangkan (dari kode):**
 
 1. Pasang Python 3.10+ dari python.org (centang **Add python.exe to PATH**). Sekali saja.
-2. Klik dua kali **start.bat**. Pertama kali akan memasang paket otomatis, lalu membuka jendela DropBridge yang sama
-   seperti versi terpasang (`desktop.py`). Catatan server ada di `data\server.log`.
+2. Klik dua kali **PC-App\start.bat**. Pertama kali akan memasang paket otomatis, lalu membuka jendela DropBridge yang sama
+   seperti versi terpasang (`desktop.py`). Catatan server ada di `%LOCALAPPDATA%\DropBridge\data\server.log`.
 3. Ingin jendela hitam seperti dulu? Jalankan `start.bat konsol`. Jendela itu menampilkan **alamat** dan **PIN**. Contoh:
    ```
    Di HP     : http://192.168.1.5:8000
@@ -64,37 +86,39 @@ Pastikan juga Wi-Fi di PC bertipe **Private** (bukan Public).
 - Hanya menerima koneksi dari jaringan lokal.
 
 Catatan: menghapus folder bersifat **permanen** (tidak masuk Recycle Bin). File yang ditaruh langsung di
-`shared/` (tanpa folder) muncul sebagai "Tanpa folder". Thumbnail membutuhkan paket Pillow
+folder penyimpanan (tanpa subfolder) muncul sebagai "Tanpa folder". Thumbnail membutuhkan paket Pillow
 (terpasang otomatis oleh start.bat saat ada internet).
 
 ## Membangun installer (DropBridge-Setup.exe)
 
 Sama seperti `build_apk.bat` untuk Android, `build_exe.bat` membuat "file jadi" untuk PC:
 
-1. Sekali saja: jalankan `start.bat` (menyiapkan `.venv`) dan pasang Inno Setup 6: `winget install JRSoftware.InnoSetup`.
-2. Bangun APK dulu di `C:\dropbridge-android` (`build_apk.bat`) supaya `DropBridge-<versi>.apk` ikut dibungkus.
-3. Klik dua kali **build_exe.bat**. Hasil: `dist\DropBridge-Setup-<versi>.exe` (versi dari `app\version.py`).
-   Tanpa Inno Setup, programnya tetap jadi di `dist\DropBridge\DropBridge.exe` dan bisa dicoba langsung.
-   Log: `build_exe_log.txt`.
+1. Sekali saja: jalankan `PC-App\start.bat` (menyiapkan `.venv`) dan pasang Inno Setup 6: `winget install JRSoftware.InnoSetup`.
+2. Bangun APK dulu: **Android-App\build_apk.bat**. Hasilnya `Rilis\DropBridge-<versi>.apk`, dan ikut dibungkus ke installer.
+3. Klik dua kali **PC-App\build_exe.bat**. Hasil: `Rilis\DropBridge-Setup-<versi>.exe` (versi dari `PC-App\app\version.py`).
+   Tanpa Inno Setup, programnya tetap jadi di `PC-App\dist\DropBridge\DropBridge.exe` dan bisa dicoba langsung.
+   Log: `PC-App\build_exe_log.txt`.
 
 Installer memasang ke Program Files, membuat pintasan Start Menu, mengizinkan DropBridge di Windows Firewall
 (Private dan Public, perlu untuk Tailscale), dan menawarkan jalan otomatis saat Windows menyala. Update: pasang
 Setup versi baru di atas yang lama; pengaturan tidak hilang. Exe tidak bertanda tangan digital, jadi Windows
 SmartScreen memperingatkan sekali: **Info selengkapnya > Tetap jalankan**.
 
-## Aplikasi Android (repositori terpisah)
+## Aplikasi Android
 
-Aplikasi Android pendamping (kirim otomatis, mode host, mencari PC otomatis, dan lain-lain) ada di repositori sendiri: **dropbridge-android**. Server ini tidak membutuhkannya untuk berjalan; web sudah cukup.
+Aplikasi Android pendamping (kirim otomatis, mode host, mencari PC otomatis, dan lain-lain) ada di `Android-App/`
+(penjelasan di `Android-App/README.md`). Server tidak membutuhkannya untuk berjalan; web sudah cukup.
 
-Untuk membagikan APK lewat server ini, taruh `DropBridge.apk` di folder `shared\DropBridge-APK\`, lalu unduh dari HP lewat halaman web dan pasang. Server membalas pencarian dari aplikasi lewat UDP port 47800 (`app/discovery.py`).
+HP mengunduh APK langsung dari laptop: menu **Hubungkan** > kartu **Aplikasi Android** (QR). APK yang ditawarkan adalah
+yang terbaru di `Rilis\` atau yang ikut di installer. Server membalas pencarian dari aplikasi lewat UDP port 47800 (`app/discovery.py`).
 
-## Pengaturan (config.json)
+## Pengaturan (`%LOCALAPPDATA%\DropBridge\config.json`)
 
 | Kunci | Fungsi |
 |---|---|
 | `port` | Port server (default 8000) |
 | `pin` | PIN login. Kosong = dibuat acak saat pertama jalan. Angka disarankan |
-| `shared_dir` | Folder file bersama (relatif atau path absolut, mis. `D:/Transfer`) |
+| `shared_dir` | Folder penyimpanan (path absolut; bawaan `Documents\DropBridge`). Lebih mudah diganti lewat **Ganti** |
 | `max_upload_mb` | Batas ukuran satu file unggahan |
 | `session_hours` | Lama login bertahan |
 | `photo_max_kb` | Batas ukuran foto dalam KB; lebih besar dikecilkan di web (default 512, 0 = nonaktif) |
@@ -102,25 +126,26 @@ Untuk membagikan APK lewat server ini, taruh `DropBridge.apk` di folder `shared\
 | `lan_only` | `true` = tolak koneksi dari luar jaringan lokal |
 | `enable_docs` | `true` = buka dokumentasi API di `/docs` |
 
-Ubah lalu jalankan ulang start.bat.
+Ubah lalu jalankan ulang DropBridge (tray > Berhenti, lalu buka lagi).
 
 ## Struktur dan cara mengembangkan
 
 ```
-dropbridge/
+Web/                   index.html, app.js, style.css
+Android-App/           proyek Android (Kotlin), build_apk.bat
+PC-App/
   start.bat            jalankan dari kode ("start.bat konsol" = jendela hitam)
   desktop.py           versi desktop: jendela sendiri (WebView2), ikon tray, notifikasi, satu instance
   tray.py              nama lama, meneruskan ke desktop.py
   run.py               server saja (dipakai "start.bat konsol"), menampilkan alamat dan PIN
-  build_exe.bat        membangun dist\DropBridge-Setup-<versi>.exe
+  build_exe.bat        membangun Rilis\DropBridge-Setup-<versi>.exe
   DropBridge.spec      resep PyInstaller (dipakai build_exe.bat)
   installer/           resep installer Inno Setup
   tools/make_icon.py   membuat ikon .ico dari logo
-  config.json          pengaturan (versi terpasang: %LOCALAPPDATA%\DropBridge\config.json)
   app/
     main.py            menggabungkan router, penjaga jaringan lokal
     auth.py            PIN -> token sesi (cookie atau header Bearer)
-    config.py          membaca config.json
+    config.py          membaca %LOCALAPPDATA%\DropBridge\config.json, letak folder Web dan Rilis
     discovery.py       membalas pencarian PC dari aplikasi Android (UDP 47800)
     events.py          kabar dari server ke jendela desktop (file masuk, munculkan jendela)
     icon.py            logo DropBridge sebagai gambar (tray dan .exe)
@@ -134,9 +159,6 @@ dropbridge/
       storage.py       penyimpanan file (sekarang folder lokal)
       storage_admin.py ganti folder penyimpanan (mis. OneDrive) tanpa restart
       thumbs.py        thumbnail foto (cache di data/thumbs)
-  web/                 index.html, app.js, style.css
-  shared/              file bersama (dibuat otomatis)
-  data/                riwayat teks (clips.json, dibuat otomatis)
 ```
 
 - **Fitur baru** = buat file di `app/routes/`, lalu daftarkan dengan `app.include_router(...)` di `main.py`.

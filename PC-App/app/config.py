@@ -1,9 +1,10 @@
 r"""Pengaturan DropBridge, dibaca dari config.json (dibuat otomatis jika belum ada).
 
-Dua cara jalan:
-- dari kode (start.bat): semua di folder proyek, seperti biasa;
-- terpasang dari DropBridge-Setup.exe: program di Program Files (hanya-baca), pengaturan dan data di
-  %LOCALAPPDATA%\DropBridge. Saat pertama jalan, pengaturan lama dari C:\DropBridge diimpor otomatis.
+Pengaturan dan data selalu di %LOCALAPPDATA%\DropBridge, baik dijalankan dari kode (start.bat)
+maupun versi terpasang (DropBridge-Setup.exe). File kiriman bawaannya di Documents\DropBridge.
+Folder kode (C:\DropBridge) hanya berisi kode, tidak ada data pribadi.
+
+Struktur kode:  <root>\Web (tampilan), <root>\PC-App (folder ini), <root>\Android-App, <root>\Rilis
 """
 import json
 import os
@@ -13,36 +14,50 @@ import sys
 from pathlib import Path
 
 FROZEN = bool(getattr(sys, "frozen", False))
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent  # PC-App
+ROOT_DIR = BASE_DIR.parent  # folder induk: Web, PC-App, Android-App, Rilis
 # Berkas bawaan (web, apk): di dalam paket .exe, atau folder proyek
 RES_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
 # Berkas yang bisa ditulis (config.json, data/)
-USER_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "DropBridge" if FROZEN else BASE_DIR
+USER_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "DropBridge"
 CONFIG_PATH = USER_DIR / "config.json"
-LEGACY_DIR = Path(r"C:\DropBridge")
+DEFAULT_SHARED = Path.home() / "Documents" / "DropBridge"
+# Tempat pengaturan versi lama (sebelum 2.4.1 tersimpan di folder kode)
+LEGACY_DIRS = [Path(r"C:\DropBridge"), ROOT_DIR, BASE_DIR]
 
 
 def _import_legacy() -> None:
-    r"""Versi terpasang, pertama kali jalan: ambil PIN, folder, dan perangkat dari C:\DropBridge."""
-    if not FROZEN or CONFIG_PATH.exists() or not (LEGACY_DIR / "config.json").exists():
+    """Pertama kali jalan: pindahkan PIN, folder, dan perangkat dari folder kode versi lama."""
+    if CONFIG_PATH.exists():
         return
-    try:
-        raw = json.loads((LEGACY_DIR / "config.json").read_text(encoding="utf-8-sig"))
-    except (OSError, json.JSONDecodeError):
+    for old in dict.fromkeys(LEGACY_DIRS):
+        cfg = old / "config.json"
+        if not cfg.is_file():
+            continue
+        try:
+            raw = json.loads(cfg.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        val = str(raw.get("shared_dir") or "").strip()
+        if not (val and Path(val).is_absolute()):
+            # Folder relatif lama (mis. "shared"): pakai bila masih ada isinya, selain itu Documents\DropBridge
+            raw["shared_dir"] = str(old / val) if val and (old / val).is_dir() else str(DEFAULT_SHARED)
+        raw["imported_from"] = str(old)
+        try:
+            USER_DIR.mkdir(parents=True, exist_ok=True)
+            if (old / "data").is_dir():
+                shutil.copytree(old / "data", USER_DIR / "data", dirs_exist_ok=True,
+                                ignore=shutil.ignore_patterns("*.part", "incoming", "*.log"))
+            CONFIG_PATH.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            return
+        # Sudah dipindah: bersihkan dari folder kode
+        try:
+            cfg.unlink()
+            shutil.rmtree(old / "data", ignore_errors=True)
+        except OSError:
+            pass
         return
-    shared = Path(str(raw.get("shared_dir", "shared")))
-    raw["shared_dir"] = str(shared if shared.is_absolute() else LEGACY_DIR / shared)
-    raw["imported_from"] = str(LEGACY_DIR)
-    USER_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
-    for name in ("sessions.json", "clips.json"):
-        src = LEGACY_DIR / "data" / name
-        if src.exists():
-            (USER_DIR / "data").mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.copy2(src, USER_DIR / "data" / name)
-            except OSError:
-                pass
 
 
 _import_legacy()
@@ -51,7 +66,7 @@ DEFAULTS = {
     "host": "0.0.0.0",
     "port": 8000,
     "pin": "",  # kosong = dibuat acak 6 angka saat pertama jalan, lalu disimpan
-    "shared_dir": "shared",  # relatif terhadap folder proyek, atau path absolut (mis. folder di OneDrive kantor)
+    "shared_dir": "",  # kosong = Documents\DropBridge; atau path absolut (mis. folder di OneDrive kantor)
     "max_upload_mb": 2048,
     "session_hours": 24,
     "photo_max_kb": 512,  # foto lebih besar ini dikecilkan resolusinya di HP/web sebelum dikirim (0 = nonaktif)
@@ -73,10 +88,10 @@ class Settings:
                 raise SystemExit(f"config.json tidak valid: {e}")
         cfg = {**DEFAULTS, **raw}
 
-        if FROZEN and not raw.get("shared_dir"):
-            # Versi terpasang tanpa pengaturan lama: simpan di Documents\DropBridge (dicatat di config.json)
-            cfg["shared_dir"] = str(Path.home() / "Documents" / "DropBridge")
-        if not str(cfg["pin"]).strip() or (FROZEN and not raw.get("shared_dir")):
+        if not raw.get("shared_dir"):
+            # Belum ada pengaturan: simpan di Documents\DropBridge (dicatat di config.json)
+            cfg["shared_dir"] = str(DEFAULT_SHARED)
+        if not str(cfg["pin"]).strip() or not raw.get("shared_dir"):
             if not str(cfg["pin"]).strip():
                 cfg["pin"] = f"{secrets.randbelow(10**6):06d}"
             USER_DIR.mkdir(parents=True, exist_ok=True)
@@ -103,9 +118,10 @@ class Settings:
         # supaya OneDrive (atau aplikasi sinkron lain) hanya melihat file yang sudah utuh.
         self.incoming_dir: Path = self.data_dir / "incoming"
         self.thumb_size: int = 480
-        self.web_dir: Path = RES_DIR / "web"
-        # APK Android untuk diunduh HP: ikut di installer, atau hasil build_apk.bat saat mengembangkan
-        self.apk_dirs = [RES_DIR / "apk", BASE_DIR.parent / "dropbridge-android" / "dist"]
+        # Tampilan: ikut di dalam .exe, atau folder Web di sebelah PC-App saat mengembangkan
+        self.web_dir: Path = RES_DIR / "web" if FROZEN else ROOT_DIR / "Web"
+        # APK Android untuk diunduh HP: ikut di installer, atau hasil build_apk.bat (folder Rilis)
+        self.apk_dirs = [RES_DIR / "apk", ROOT_DIR / "Rilis"]
 
 
 def save_setting(key: str, value) -> None:
