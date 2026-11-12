@@ -26,7 +26,7 @@ class SendActivity : Activity() {
     private lateinit var info2: TextView
     private lateinit var chips: LinearLayout
     private lateinit var chipScroll: android.widget.HorizontalScrollView
-    private lateinit var chipsTitle: TextView
+    private lateinit var folderHint: TextView
     private lateinit var hint: TextView
     private lateinit var shrinkSwitch: android.widget.Switch
     private lateinit var folderEdit: AutoCompleteTextView
@@ -100,7 +100,13 @@ class SendActivity : Activity() {
         summary.addView(srow)
         col.addView(summary, Ui.lp(c))
 
-        col.addView(Ui.caption(c, "Folder tujuan di PC"), Ui.lp(c, t = 18, b = 8))
+        // Folder tujuan: sama seperti tab Kirim (ikon folder = panel Pilih folder dengan subfolder)
+        val fcard = Ui.card(c, pad = 14)
+        val fhead = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        fhead.addView(Ui.text(c, "Folder tujuan di PC", 13f, true, Ui.MUTED), LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        folderHint = Ui.text(c, "", 12f, true, Ui.ACCENT)
+        fhead.addView(folderHint)
+        fcard.addView(fhead)
         folderAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, ArrayList(known))
         folderEdit = AutoCompleteTextView(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT
@@ -109,24 +115,41 @@ class SendActivity : Activity() {
             setText(Prefs.lastFolder)
             setSelection(text.length)
             setDropDownBackgroundDrawable(Ui.rounded(c, Ui.CARD, 12, Ui.LINE))
-            setOnFocusChangeListener { _, focused -> if (focused && text.isEmpty()) showDropDown() }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
                 override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
                 override fun afterTextChanged(s: Editable?) { updateHint() }
             })
         }
-        Ui.styleInput(c, folderEdit, "Ketik nama folder, mis. 27 012345")
+        Ui.styleInput(c, folderEdit, "Ketik atau pilih folder")
         folderEdit.textSize = 18f
-        folderEdit.minimumHeight = Ui.dp(c, 56)
-        folderEdit.background = Ui.rounded(c, Ui.CARD, 16, Ui.ACCENT).also { it.setStroke(Ui.dp(c, 2), Ui.ACCENT) }
-        col.addView(folderEdit, Ui.lp(c))
-
-        hint = Ui.text(c, "", 14f, false, Ui.MUTED).apply {
-            setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 12))
+        folderEdit.setTypeface(folderEdit.typeface, android.graphics.Typeface.BOLD)
+        folderEdit.minimumHeight = Ui.dp(c, 54)
+        folderEdit.background = Ui.rounded(c, Ui.CARD, 14).also { it.setStroke(Ui.dp(c, 2), Ui.ACCENT) }
+        val frow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        frow.addView(android.widget.FrameLayout(c).apply {
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Pilih folder"
+            background = Ui.ripple(c, Ui.SOFT2, 14)
+            setOnClickListener { openPicker() }
+            addView(IconView(c, Icon.FOLDER, Ui.ACCENT, 24, 2f), android.widget.FrameLayout.LayoutParams(Ui.dp(c, 24), Ui.dp(c, 24), android.view.Gravity.CENTER))
+        }, LinearLayout.LayoutParams(Ui.dp(c, 54), Ui.dp(c, 54)).apply { rightMargin = Ui.dp(c, 8) })
+        frow.addView(folderEdit, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        fcard.addView(frow, Ui.lp(c, t = 8))
+        hint = Ui.text(c, "", 13f, true, Ui.AMBER_TX).apply {
+            setPadding(Ui.dp(c, 12), Ui.dp(c, 10), Ui.dp(c, 12), Ui.dp(c, 10))
+            background = Ui.rounded(c, Ui.AMBER_BG, 12)
             visibility = View.GONE
         }
-        col.addView(hint, Ui.lp(c, t = 10))
+        fcard.addView(hint, Ui.lp(c, t = 8))
+        chips = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        chipScroll = android.widget.HorizontalScrollView(c).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(chips)
+        }
+        fcard.addView(chipScroll, Ui.lp(c, t = 10))
+        col.addView(fcard, Ui.lp(c, t = 12))
 
         val shrinkCard = Ui.card(c, Ui.CARD, 14)
         val shrinkRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
@@ -141,17 +164,6 @@ class SendActivity : Activity() {
         shrinkRow.addView(shrinkSwitch)
         shrinkCard.addView(shrinkRow)
         col.addView(shrinkCard, Ui.lp(c, t = 12))
-
-        chipsTitle = Ui.caption(c, "Folder di PC")
-        chipsTitle.visibility = View.GONE
-        col.addView(chipsTitle, Ui.lp(c, t = 18, b = 8))
-        chipScroll = android.widget.HorizontalScrollView(c).apply {
-            isHorizontalScrollBarEnabled = false
-            visibility = View.GONE
-        }
-        chips = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
-        chipScroll.addView(chips)
-        col.addView(chipScroll, Ui.lp(c))
 
         updateInfo()
         refreshChips()
@@ -247,17 +259,31 @@ class SendActivity : Activity() {
     private fun refreshChips() {
         chips.removeAllViews()
         val c: android.content.Context = this
-        val list = known.take(8)
-        val v = if (list.isEmpty()) View.GONE else View.VISIBLE
-        chipsTitle.visibility = v
-        chipScroll.visibility = v
+        val list = known.take(6)
+        chipScroll.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
+        if (list.isNotEmpty()) chips.addView(Ui.text(c, "Terakhir:", 13f, false, Ui.MUTED), Ui.lp(c, Ui.WRAP, Ui.WRAP, r = 8))
         for (n in list) {
-            chips.addView(Ui.button(c, n, Ui.Kind.OUTLINE, 44) {
-                folderEdit.setText(n)
-                folderEdit.setSelection(n.length)
-                folderEdit.dismissDropDown()
-            }.apply { background = Ui.ripple(c, Ui.CARD, 22, Ui.LINE2) }, Ui.lp(c, Ui.WRAP, Ui.WRAP, r = 8))
+            chips.addView(Ui.text(c, pathLabel(n), 14f, true, Ui.DEEP).apply {
+                background = Ui.rounded(c, Ui.SOFT, 999)
+                setPadding(Ui.dp(c, 14), Ui.dp(c, 8), Ui.dp(c, 14), Ui.dp(c, 8))
+                isClickable = true
+                setOnClickListener { setTarget(n) }
+            }, Ui.lp(c, Ui.WRAP, Ui.WRAP, r = 8))
         }
+    }
+
+    private fun setTarget(p: String) {
+        folderEdit.setText(p)
+        folderEdit.setSelection(p.length)
+        folderEdit.dismissDropDown()
+    }
+
+    /** Jalur folder dari ketikan: "A / B" → "A/B" (bagian kosong dibuang). */
+    private fun cleanPath(t: String): String =
+        t.split('/', '\\').map { it.trim().replace(Regex("\\s+"), " ") }.filter { it.isNotEmpty() }.joinToString("/")
+
+    private fun openPicker() {
+        FolderPicker.open(this, cleanPath(folderEdit.text.toString())) { p -> setTarget(p); loadFolders() }
     }
 
     private fun withinOneEdit(x: String, y: String): Boolean {
@@ -272,31 +298,22 @@ class SendActivity : Activity() {
         return s.substring(i) == l.substring(i + 1)
     }
 
-    private fun showHint(msg: String, bg: Int, fg: Int) {
-        val c: android.content.Context = this
-        hint.text = msg
-        hint.setTextColor(fg)
-        hint.background = Ui.rounded(c, bg, 14)
-        hint.visibility = View.VISIBLE
-    }
-
     private fun updateHint() {
-        val name = folderEdit.text.toString().trim()
-        if (name.isEmpty()) {
-            hint.visibility = View.GONE
-            return
+        val t = cleanPath(folderEdit.text.toString())
+        val exists = t.isNotEmpty() && known.any { it.equals(t, ignoreCase = true) }
+        val depth = if (t.isEmpty()) 0 else t.count { it == '/' } + 1
+        folderHint.text = when {
+            t.isEmpty() -> ""
+            depth > MAX_DEPTH -> "Maks. $MAX_DEPTH tingkat"
+            exists -> "Sudah ada di PC"
+            t.contains('/') -> "Subfolder baru"
+            else -> "Folder baru"
         }
-        val exact = known.firstOrNull { it.equals(name, ignoreCase = true) }
-        if (exact != null) {
-            showHint("Folder sudah ada di PC.", Ui.SOFT, Ui.DEEP)
-            return
-        }
-        val similar = if (name.length >= 4) known.filter { withinOneEdit(it, name) }.take(3) else emptyList()
-        if (similar.isNotEmpty()) {
-            showHint("Mirip dengan: ${similar.joinToString(", ")}. Salah ketik?", Ui.AMBER_BG, Ui.AMBER_TX)
-        } else {
-            showHint("Folder baru, dibuat otomatis di PC.", Ui.FIELD, Ui.MUTED)
-        }
+        folderHint.setTextColor(if (depth > MAX_DEPTH) Ui.DANGER else if (exists) Ui.ACCENT else Ui.MUTED)
+        // Peringatan salah ketik: nama hampir sama dengan folder yang sudah ada
+        val similar = if (!exists && t.length >= 4) known.filter { withinOneEdit(it, t) }.take(3) else emptyList()
+        hint.text = "Mirip dengan: ${similar.joinToString(", ") { pathLabel(it) }}. Salah ketik?"
+        hint.visibility = if (similar.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun loadFolders() {
@@ -344,12 +361,16 @@ class SendActivity : Activity() {
             return
         }
 
-        val folder = folderEdit.text.toString().trim()
+        val folder = cleanPath(folderEdit.text.toString())
         if (uris.isEmpty()) return
+        if (folder.count { it == '/' } + 1 > MAX_DEPTH) {
+            Toast.makeText(this, "Folder maksimal $MAX_DEPTH tingkat", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (folder.isEmpty()) {
             android.app.AlertDialog.Builder(this)
                 .setTitle("Folder tujuan belum diisi")
-                .setMessage("Kirim file ini ke \"Tanpa folder\" (langsung di folder shared di PC), atau isi nama folder dulu?")
+                .setMessage("Kirim file ini ke \"Tanpa folder\" (langsung di folder penyimpanan PC), atau isi nama folder dulu?")
                 .setPositiveButton("Kirim tanpa folder") { _, _ -> queueAndFinish("") }
                 .setNegativeButton("Isi folder dulu") { _, _ -> folderEdit.requestFocus() }
                 .show()
@@ -364,7 +385,7 @@ class SendActivity : Activity() {
         val list = uris
         val app = applicationContext
         val shrink = shrinkSwitch.isChecked
-        val label = if (folder.isEmpty()) "Tanpa folder" else "folder \"$folder\""
+        val label = if (folder.isEmpty()) "Tanpa folder" else pathLabel(folder)
         Thread {
             var n = 0
             for (u in list) if (Queue.add(app, u, folder, shrink) != null) n++
