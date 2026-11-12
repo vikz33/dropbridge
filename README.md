@@ -5,8 +5,25 @@ tanpa memasang aplikasi di HP. Cukup browser.
 
 ## Cara pakai
 
+**Pemakaian sehari-hari (versi terpasang):** pasang `DropBridge-Setup-<versi>.exe`, lalu buka **DropBridge** dari
+Start Menu. Begitu dibuka, laptop langsung jadi server: HP bisa mengirim lewat Wi-Fi yang sama atau Tailscale.
+
+- Jendela DropBridge berisi halaman yang sama dengan web di HP dan aplikasi Android (Kirim, File, Hubungkan, Pengaturan).
+- Tombol **X** menyembunyikan jendela ke **ikon di dekat jam**; DropBridge tetap jalan supaya HP masih bisa mengirim.
+  Berhenti total: klik kanan ikon > **Berhenti**.
+- Saat Windows menyala, DropBridge jalan diam-diam di ikon tray (pilihan di installer atau menu tray).
+- Dibuka lagi saat sudah jalan: jendela yang ada dimunculkan, tidak ada salinan kedua.
+- Notifikasi Windows saat file masuk ("4 file masuk ke TRHU-4134291 › 30-1"); klik ikon tray untuk membuka foldernya.
+- Pengaturan dan data ada di `%LOCALAPPDATA%\DropBridge`. Saat pertama dipasang, PIN, perangkat, dan folder penyimpanan
+  dari `C:\DropBridge` diimpor otomatis, jadi HP tidak perlu dihubungkan ulang.
+- Pertama kali dibuka (dan setelah update) muncul halaman **Selamat datang**: folder penyimpanan, QR untuk HP, dan QR
+  untuk mengunduh aplikasi Android dari laptop ini.
+
+**Saat mengembangkan (dari kode):**
+
 1. Pasang Python 3.10+ dari python.org (centang **Add python.exe to PATH**). Sekali saja.
-2. Klik dua kali **start.bat**. Pertama kali akan memasang paket otomatis. DropBridge lalu jalan di latar belakang dengan **ikon di dekat jam** Windows (klik ^ bila tersembunyi). Klik kanan ikon: **Buka DropBridge**, **Hubungkan HP (QR)**, **Buka folder shared**, PIN, **Mulai otomatis saat Windows menyala**, **Berhenti**. Catatan server ada di `data\server.log`.
+2. Klik dua kali **start.bat**. Pertama kali akan memasang paket otomatis, lalu membuka jendela DropBridge yang sama
+   seperti versi terpasang (`desktop.py`). Catatan server ada di `data\server.log`.
 3. Ingin jendela hitam seperti dulu? Jalankan `start.bat konsol`. Jendela itu menampilkan **alamat** dan **PIN**. Contoh:
    ```
    Di HP     : http://192.168.1.5:8000
@@ -29,14 +46,17 @@ Pastikan juga Wi-Fi di PC bertipe **Private** (bukan Public).
 **Tampilan:** tiga menu yang sama di PC, HP, dan aplikasi Android. **Kirim** (folder tujuan, Pilih file, kecilkan foto, tautan Kirim teks), **File** (cari, daftar atau kotak, isi folder) dan **Hubungkan** (QR agar HP lain masuk, perangkat terhubung). Nama perangkat dan Keluar ada di ikon pengaturan di kanan atas. Di PC menunya di atas; di HP menunya di bawah layar.
 
 - Login PIN (percobaan salah dibatasi: 5x, lalu kunci 60 detik)
-- **Folder per barang/dokumen**: nama folder bebas diketik pengguna (mis. `27 012345`). Satu level, isinya datar.
-  Folder dibuat otomatis saat file pertama dikirim.
+- **Folder per barang/dokumen, bisa bertingkat** (maks. 3 tingkat): ketik `TRHU-4134291/30-1` atau pilih lewat ikon folder di kolom tujuan
+  (panel **Pilih folder**: masuk ke subfolder, buat folder baru, pilih). Folder dibuat otomatis saat file pertama dikirim.
+  Di halaman File: ikon **folder+** membuat folder di tempat itu, subfolder tampil di atas file, jejak lokasi `File › A › B`
+  bisa diketuk. Jumlah file folder induk menghitung isi subfolder; ZIP ikut membawa subfolder.
+  Folder yang berisi subfolder tidak bisa dihapus dari HP (hapus subfoldernya dulu).
 - Kotak "Kirim ke folder": saran dari folder yang ada, chip folder terbaru, peringatan "Mirip dengan ..."
   jika nama hampir sama dengan folder lain (mencegah salah ketik), dan folder terakhir diingat.
 - Kirim banyak foto/file sekaligus dari HP, dengan progress per file. Kualitas foto asli, nama file asli.
   File diurutkan menurut waktu foto aslinya (terlama dulu). Unggahan dikirim mentah dan langsung ditulis ke disk (cepat).
 - Lihat isi folder sebagai kotak thumbnail; pratinjau dengan geser/panah; **Pindah** dan **Hapus** per file.
-- Dari HP: ganti nama folder, hapus folder (dengan konfirmasi yang menyebut jumlah file), unduh folder sebagai ZIP.
+- Dari HP: buat folder dan subfolder, ganti nama folder, hapus folder (dengan konfirmasi yang menyebut jumlah file), unduh folder sebagai ZIP.
 - Di PC: seret file ke halaman (masuk ke folder yang tertulis di kotak), atau tempel gambar dengan Ctrl+V.
 - Kirim teks atau link antar perangkat.
 - **Identitas perangkat**: tiap perangkat diberi nama saat pertama masuk. Tombol **Perangkat** menampilkan siapa yang terhubung (nama, jenis, IP, aktif terakhir) dan bisa **Keluarkan** perangkat tak dikenal. Perangkat lain otomatis keluar setelah 8 jam tidak aktif (PC sendiri dikecualikan).
@@ -46,6 +66,21 @@ Pastikan juga Wi-Fi di PC bertipe **Private** (bukan Public).
 Catatan: menghapus folder bersifat **permanen** (tidak masuk Recycle Bin). File yang ditaruh langsung di
 `shared/` (tanpa folder) muncul sebagai "Tanpa folder". Thumbnail membutuhkan paket Pillow
 (terpasang otomatis oleh start.bat saat ada internet).
+
+## Membangun installer (DropBridge-Setup.exe)
+
+Sama seperti `build_apk.bat` untuk Android, `build_exe.bat` membuat "file jadi" untuk PC:
+
+1. Sekali saja: jalankan `start.bat` (menyiapkan `.venv`) dan pasang Inno Setup 6: `winget install JRSoftware.InnoSetup`.
+2. Bangun APK dulu di `C:\dropbridge-android` (`build_apk.bat`) supaya `DropBridge-<versi>.apk` ikut dibungkus.
+3. Klik dua kali **build_exe.bat**. Hasil: `dist\DropBridge-Setup-<versi>.exe` (versi dari `app\version.py`).
+   Tanpa Inno Setup, programnya tetap jadi di `dist\DropBridge\DropBridge.exe` dan bisa dicoba langsung.
+   Log: `build_exe_log.txt`.
+
+Installer memasang ke Program Files, membuat pintasan Start Menu, mengizinkan DropBridge di Windows Firewall
+(Private dan Public, perlu untuk Tailscale), dan menawarkan jalan otomatis saat Windows menyala. Update: pasang
+Setup versi baru di atas yang lama; pengaturan tidak hilang. Exe tidak bertanda tangan digital, jadi Windows
+SmartScreen memperingatkan sekali: **Info selengkapnya > Tetap jalankan**.
 
 ## Aplikasi Android (repositori terpisah)
 
@@ -73,21 +108,31 @@ Ubah lalu jalankan ulang start.bat.
 
 ```
 dropbridge/
-  start.bat            jalankan di Windows (ikon tray; "start.bat konsol" = jendela hitam)
-  tray.py              ikon tray: server di latar belakang, mulai otomatis
-  run.py               titik masuk, menampilkan alamat dan PIN
-  config.json          pengaturan
+  start.bat            jalankan dari kode ("start.bat konsol" = jendela hitam)
+  desktop.py           versi desktop: jendela sendiri (WebView2), ikon tray, notifikasi, satu instance
+  tray.py              nama lama, meneruskan ke desktop.py
+  run.py               server saja (dipakai "start.bat konsol"), menampilkan alamat dan PIN
+  build_exe.bat        membangun dist\DropBridge-Setup-<versi>.exe
+  DropBridge.spec      resep PyInstaller (dipakai build_exe.bat)
+  installer/           resep installer Inno Setup
+  tools/make_icon.py   membuat ikon .ico dari logo
+  config.json          pengaturan (versi terpasang: %LOCALAPPDATA%\DropBridge\config.json)
   app/
     main.py            menggabungkan router, penjaga jaringan lokal
     auth.py            PIN -> token sesi (cookie atau header Bearer)
     config.py          membaca config.json
     discovery.py       membalas pencarian PC dari aplikasi Android (UDP 47800)
+    events.py          kabar dari server ke jendela desktop (file masuk, munculkan jendela)
+    icon.py            logo DropBridge sebagai gambar (tray dan .exe)
+    version.py         nomor versi PC
     routes/
       folders.py       /api/folders (daftar, buat, ganti nama, hapus, ZIP)
       files.py         /api/files (daftar, upload, unduh, pindah, thumbnail, hapus)
       clipboard.py     /api/clips (kirim teks)
+      system.py        khusus PC ini: folder penyimpanan, buka Explorer, Selamat datang, unduh APK
     services/
       storage.py       penyimpanan file (sekarang folder lokal)
+      storage_admin.py ganti folder penyimpanan (mis. OneDrive) tanpa restart
       thumbs.py        thumbnail foto (cache di data/thumbs)
   web/                 index.html, app.js, style.css
   shared/              file bersama (dibuat otomatis)
@@ -104,6 +149,33 @@ dropbridge/
 - Mode host dengan hotspot + QR/kode angka untuk iPhone dan HP lain
 - Android: lihat dan unduh folder dari PC di dalam aplikasi; Bluetooth dan Wi-Fi Direct
 - Versi internet menyusul belakangan
+
+## Simpan langsung ke OneDrive (atau folder lain)
+
+Klik kanan ikon DropBridge di tray > **Folder penyimpanan**:
+
+- **Simpan di OneDrive kantor (folder DropBridge)**: kiriman masuk ke `OneDrive - <kantor>\DropBridge`.
+- **Pilih folder lain…**: pilih folder mana saja, misalnya folder OneDrive yang sudah kamu pakai.
+
+DropBridge menawarkan untuk memindahkan isi folder lama ke lokasi baru (folder digabung, file yang sudah ada di tujuan
+tidak ditimpa), lalu menjalankan dirinya ulang. Pilihan tersimpan di `config.json` (`shared_dir`).
+
+Kiriman yang belum lengkap ditulis dulu di `data\incoming`, baru dipindah ke folder tujuan saat utuh, jadi OneDrive
+tidak pernah mengunggah file setengah jadi. Saran: klik kanan folder DropBridge di OneDrive > **Selalu simpan di
+perangkat ini**, supaya thumbnail dan pengecekan file ganda tetap cepat.
+
+## Kirim dari luar jaringan (Tailscale)
+
+Untuk mengirim dari HP sendiri walau tidak satu Wi-Fi dengan PC, misalnya dari gudang lewat data seluler:
+
+1. Pasang Tailscale di PC dan di HP (https://tailscale.com/download), login dengan akun yang sama.
+2. Sambungkan aplikasi DropBridge sekali lewat Wi-Fi seperti biasa. Aplikasi mencatat alamat Tailscale PC (`100.x.x.x`).
+3. Di luar jaringan, nyalakan Tailscale di HP. Aplikasi mencoba alamat Wi-Fi dulu, lalu pindah sendiri ke alamat Tailscale.
+   Status di halaman Kirim menjadi "... terhubung · lewat internet".
+
+Dari browser HP, buka halaman Hubungkan di PC dan scan QR "Dari luar jaringan".
+Server menerima alamat Tailscale (100.64.0.0/10) seperti alamat LAN; alamat internet lain tetap ditolak.
+Kirim otomatis di latar belakang memakai data seluler hanya jika "Boleh pakai data seluler" aktif di Pengaturan aplikasi.
 
 ## Keamanan
 

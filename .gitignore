@@ -9,6 +9,11 @@ data/
 config.json
 _dropbridge/
 
+# Hasil build_exe.bat
+build/
+dist/
+build_exe_log.txt
+
 # Repositori Android terpisah (taruh di luar folder ini)
 dropbridge-android/
 *.apk
@@ -19,3 +24,6 @@ dropbridge-android/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Data jendela desktop
+webview/

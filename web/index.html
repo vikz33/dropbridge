@@ -41,12 +41,17 @@
 
     <main id="pageSend" class="page send-page">
       <div class="send-col">
+        <div id="storeLine" class="store-line" hidden>
+          <span class="muted small">Disimpan di</span>
+          <span class="store-chip" id="storeChip"><span id="storeIc"></span><span id="storePath"></span></span>
+          <button type="button" class="linkbtn inline store-change">Ganti</button>
+        </div>
         <div id="sendFile" class="send-block">
           <section class="card fcard">
             <label for="folderInput" class="lbl">Folder tujuan</label>
             <div class="combo fc-input">
-              <span class="fc-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
-              <input id="folderInput" type="text" placeholder="Ketik nama folder, mis. 27 012345" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+              <button id="pickBtn" type="button" class="fc-ic" aria-label="Pilih folder" title="Pilih folder" aria-haspopup="dialog"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+              <input id="folderInput" type="text" placeholder="Ketik atau pilih folder, mis. 27 012345" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
               <ul id="suggest" class="suggest" hidden></ul>
             </div>
             <p id="folderHint" class="hint"></p>
@@ -109,6 +114,7 @@
           </div>
           <div class="tbar">
             <button id="fSort" class="sortbtn" type="button" aria-haspopup="dialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg><span class="sort-label">Terbaru diubah</span><svg class="chev-d" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+            <button id="fNew" class="iconbtn newbtn" type="button" aria-label="Folder baru" title="Folder baru"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/></svg></button>
             <div class="seg" role="group" aria-label="Tampilan">
               <button id="fgList" type="button" aria-pressed="true" title="Tampilan daftar" aria-label="Tampilan daftar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
               <button id="fgGrid" type="button" aria-pressed="false" title="Tampilan ikon" aria-label="Tampilan ikon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
@@ -122,6 +128,7 @@
         <div class="fv-head">
           <a class="iconbtn back" href="#/folders" aria-label="Kembali ke semua folder"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a>
           <div class="fv-title">
+            <nav id="fvCrumbs" class="crumbs" aria-label="Lokasi"></nav>
             <h2 id="fvTitle"></h2>
             <span id="fvMeta" class="muted small"></span>
           </div>
@@ -130,14 +137,47 @@
         </div>
         <div class="tbar">
           <button id="gSort" class="sortbtn" type="button" aria-haspopup="dialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg><span class="sort-label">Terbaru diambil</span><svg class="chev-d" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <button id="gNew" class="iconbtn newbtn" type="button" aria-label="Folder baru di sini" title="Folder baru di sini"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/></svg></button>
           <div class="seg" role="group" aria-label="Tampilan">
               <button id="gvList" type="button" aria-pressed="true" title="Tampilan daftar" aria-label="Tampilan daftar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
               <button id="gvGrid" type="button" aria-pressed="false" title="Tampilan ikon" aria-label="Tampilan ikon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
             </div>
         </div>
+        <div id="subWrap" hidden>
+          <h3 class="sec-label">Folder</h3>
+          <ul id="subList" class="flist"></ul>
+          <h3 id="fileLabel" class="sec-label">File</h3>
+        </div>
         <div id="grid" class="grid"></div>
         <input id="picker2" type="file" multiple hidden>
       </div>
+    </main>
+
+    <main id="pageWelcome" class="page welcome" hidden>
+      <div class="wel-head">
+        <div>
+          <h2 id="welTitle">Selamat datang di DropBridge</h2>
+          <p class="muted">Tiga langkah, satu kali saja. Halaman ini hanya muncul setelah pemasangan atau pembaruan.</p>
+        </div>
+        <button id="welDone" class="btn primary" type="button">Selesai, buka DropBridge</button>
+      </div>
+      <div class="wel-grid">
+        <section class="card wel-card">
+          <div class="wel-step"><span class="wel-n done" aria-hidden="true">✓</span><div><h3>Folder penyimpanan</h3><p class="muted small">Ke mana file dari HP masuk</p></div></div>
+          <div class="store-box"><span class="store-ic" id="welStoreIc"></span><div><b id="welStore"></b><small id="welStoreSub" class="muted"></small></div></div>
+          <button class="btn store-change" type="button">Ganti folder…</button>
+        </section>
+        <section class="card wel-card">
+          <div class="wel-step"><span class="wel-n" aria-hidden="true">2</span><div><h3>Hubungkan HP</h3><p class="muted small">Scan dengan kamera HP, PIN ikut terisi</p></div></div>
+          <div class="addr" data-addr hidden></div>
+          <p class="muted small">HP yang sudah pernah tersambung tidak perlu scan lagi.</p>
+        </section>
+        <section class="card wel-card">
+          <div class="wel-step"><span class="wel-n" aria-hidden="true">3</span><div><h3>Aplikasi Android <span class="muted small">(opsional)</span></h3><p class="muted small">Untuk Foto langsung, antrean, dan kirim di latar belakang</p></div></div>
+          <div data-apk></div>
+        </section>
+      </div>
+      <p class="muted small">DropBridge berjalan di ikon dekat jam. Menutup jendela tidak menghentikannya, jadi HP tetap bisa mengirim. Berhenti total: klik kanan ikonnya › Berhenti.</p>
     </main>
 
     <main id="pageMore" class="page connect" hidden>
@@ -145,6 +185,34 @@
         <h2>Masuk dari HP</h2>
         <div class="addr" data-addr hidden></div>
         <p id="qrOff" class="muted" hidden>Alamat PC belum terdeteksi.</p>
+      </section>
+      <section class="card qr-card remote-card" id="remoteCard" hidden>
+        <h2>Dari luar jaringan <span class="tag">Tailscale</span></h2>
+        <div id="remoteOn" hidden>
+          <div class="addr-wrap">
+            <div class="addr-qrbox">
+              <img id="remoteQr" class="addr-qr" width="168" height="168" alt="Kode QR alamat Tailscale PC ini">
+              <div class="addr-qrcap">Untuk HP-mu yang memasang Tailscale. Bisa dipakai dari gudang lewat data seluler.</div>
+            </div>
+            <div class="addr-side">
+              <div class="addr-title">Alamat lewat internet (ketuk untuk menyalin):</div>
+              <div id="remoteList" class="addr-list remote-list"></div>
+              <p class="muted small">Aplikasi DropBridge pindah ke jalur ini sendiri saat Wi-Fi PC tidak terjangkau. Pakai kuota data.</p>
+            </div>
+          </div>
+        </div>
+        <div id="remoteOff" hidden>
+          <p class="muted small">Kirim dari HP-mu walau tidak satu Wi-Fi dengan PC, misalnya dari gudang. Gratis, terenkripsi, tidak terbuka untuk umum.</p>
+          <ol class="steps">
+            <li>Pasang Tailscale di PC ini dan di HP-mu: <a href="https://tailscale.com/download" target="_blank" rel="noopener">tailscale.com/download</a></li>
+            <li>Login di keduanya dengan akun yang sama.</li>
+            <li>Muat ulang halaman ini. QR "dari luar jaringan" akan muncul di sini.</li>
+          </ol>
+        </div>
+      </section>
+      <section class="card qr-card apk-card" id="apkCard" hidden>
+        <h2>Aplikasi Android <span class="tag" id="apkTag"></span></h2>
+        <div data-apk></div>
       </section>
       <section class="card more-card">
         <div class="dev-head">
@@ -198,6 +266,10 @@
           <button type="button" data-theme-set="dark">Gelap</button>
         </div>
       </div>
+      <label class="mrow" id="notifyRow" hidden>
+        <span><b>Notifikasi saat file masuk</b><small>Muncul di pojok layar laptop ini, mis. "4 file masuk ke TRHU-4134291 › 30-1".</small></span>
+        <input id="notifyChk" type="checkbox">
+      </label>
       <label class="mrow" id="shrinkRow">
         <span><b>Kecilkan foto ke bawah <span id="shrinkKB">512</span> KB</b><small>Matikan untuk resolusi penuh, mis. foto liburan.</small></span>
         <input id="shrinkPhotos" type="checkbox" checked>
@@ -206,6 +278,7 @@
         <span><b>Keluar</b><small>Perlu PIN untuk masuk lagi.</small></span>
         <button id="logout" class="btn small danger" type="button">Keluar</button>
       </div>
+      <p id="verLine" class="muted small ver-line"></p>
     </div>
   </dialog>
 
@@ -245,6 +318,46 @@
   </dialog>
 
   <div id="menu" class="menu" role="menu" hidden></div>
+
+  <dialog id="storeDlg" class="small-dlg">
+    <div class="dlg-body">
+      <h3>Ganti folder penyimpanan</h3>
+      <p id="storeAsk"></p>
+      <div class="dlg-actions store-actions">
+        <button id="storeCancel" class="btn" type="button">Batal</button>
+        <button id="storeNew" class="btn" type="button">Hanya kiriman baru</button>
+        <button id="storeMove" class="btn primary" type="button">Pindahkan juga</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="newDlg" class="small-dlg">
+    <form id="newForm" class="dlg-body">
+      <h3>Folder baru</h3>
+      <p id="newWhere" class="muted small where"></p>
+      <label for="newName" class="lbl">Nama folder</label>
+      <input id="newName" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="mis. 30-4">
+      <p id="newErr" class="error"></p>
+      <div class="dlg-actions">
+        <button id="newCancel" class="btn" type="button">Batal</button>
+        <button class="btn primary" type="submit">Buat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="pickDlg" class="sheet pick-dlg">
+    <div class="dlg-body">
+      <div class="pick-head">
+        <button id="pickUp" class="iconbtn" type="button" aria-label="Naik satu tingkat"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <h3>Pilih folder tujuan</h3>
+        <button id="pickClose" class="btn ghost small" type="button">Tutup</button>
+      </div>
+      <nav id="pickCrumbs" class="crumbs" aria-label="Lokasi"></nav>
+      <ul id="pickList" class="pick-list"></ul>
+      <button id="pickNew" class="btn dashed" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/></svg>Folder baru di sini</button>
+      <button id="pickOk" class="btn primary pick-ok" type="button">Pilih</button>
+    </div>
+  </dialog>
 
   <script src="app.js"></script>
 </body>

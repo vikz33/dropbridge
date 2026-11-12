@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from .config import settings
-from .netinfo import lan_ips
+from .netinfo import all_ips
 
 COOKIE = "db_token"
 MAX_FAILS = 5
@@ -89,7 +89,7 @@ def is_this_pc(request: Request) -> bool:
         ip = ip.ipv4_mapped
     if ip.is_loopback:
         return True
-    return str(ip) in set(lan_ips())
+    return str(ip) in set(all_ips())
 
 
 def _kind_of(ua: str) -> str:
@@ -155,6 +155,9 @@ def require_auth(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Belum login.")
     s["last"] = now
     s["ip"] = _client_ip(request)
+    ua = request.headers.get("user-agent", "")[:300]
+    if ua and ua != s["ua"]:
+        s["ua"] = ua  # mis. aplikasi Android diperbarui: versinya ikut tercatat
     if now - _last_save > SAVE_EVERY:
         _save()
 
@@ -254,7 +257,13 @@ def _public(token: str, s: dict, mine: str | None, now: float) -> dict:
         "online": now - s["last"] <= ONLINE_SECONDS,
         "current": token == mine,
         "local": s["local"],
+        "app": _app_version(s["ua"]),  # versi aplikasi Android ("" = lewat browser)
     }
+
+
+def _app_version(ua: str) -> str:
+    m = re.search(r"DropBridge-Android/([0-9.]+)", ua or "")
+    return m.group(1) if m else ""
 
 
 @router.get("/devices", dependencies=[Depends(require_auth)])

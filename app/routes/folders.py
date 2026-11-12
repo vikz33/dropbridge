@@ -1,4 +1,4 @@
-"""Folder: daftar, buat, ganti nama, hapus, dan unduh sebagai ZIP."""
+"""Folder (bertingkat, mis. "A/B"): daftar, buat, ganti nama, hapus, dan unduh sebagai ZIP."""
 import re
 from typing import Optional
 from urllib.parse import quote
@@ -33,12 +33,12 @@ def create_folder(body: FolderIn):
     return {"name": name, "created": created, "changed": name != body.name.strip()}
 
 
-@router.patch("/{name}")
+@router.patch("/{name:path}")
 def rename_folder(name: str, body: FolderIn):
     return {"name": storage.rename_folder(name, body.name)}
 
 
-@router.delete("/{name}")
+@router.delete("/{name:path}")
 def delete_folder(name: str, expect: Optional[int] = None):
     # `expect` wajib: jumlah file yang ditampilkan ke pengguna saat konfirmasi.
     if expect is None:
@@ -47,7 +47,7 @@ def delete_folder(name: str, expect: Optional[int] = None):
     return {"ok": True, "deleted": deleted}
 
 
-@router.get("/{name}/zip")
+@router.get("/{name:path}/zip")
 def zip_folder(name: str):
     filename, chunks = storage.zip_stream(name)
     return StreamingResponse(

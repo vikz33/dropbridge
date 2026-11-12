@@ -66,7 +66,7 @@ if /i "%~1"=="konsol" (
   exit /b 0
 )
 
-REM Biasanya: jalan di latar belakang dengan ikon di dekat jam (tray). Jendela ini menutup sendiri.
-start "" ".venv\Scripts\pythonw.exe" tray.py
-echo DropBridge jalan di latar belakang. Cari ikonnya di dekat jam (klik ^ bila tersembunyi).
+REM Biasanya: jendela DropBridge + ikon di dekat jam (tray). Jendela hitam ini menutup sendiri.
+start "" ".venv\Scripts\pythonw.exe" desktop.py
+echo DropBridge dibuka. Saat jendelanya ditutup, DropBridge tetap jalan di ikon dekat jam.
 timeout /t 4 >nul

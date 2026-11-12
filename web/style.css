@@ -105,8 +105,12 @@ input, textarea {
 }
 .fcard { padding: 14px; display: grid; gap: 10px; }
 .combo { position: relative; }
-.fc-input .fc-ic { position: absolute; left: 14px; top: 15px; color: var(--accent); pointer-events: none; }
-.fc-input input { border: 2px solid var(--accent); min-height: 54px; padding-left: 46px; font-size: 1.1rem; font-weight: 700; }
+.fc-input .fc-ic {
+  position: absolute; left: 7px; top: 7px; width: 40px; height: 40px; border: 0; border-radius: 10px; cursor: pointer;
+  background: var(--soft); color: var(--accent); display: grid; place-items: center;
+}
+.fc-input .fc-ic:hover { filter: brightness(.96); }
+.fc-input input { border: 2px solid var(--accent); min-height: 54px; padding-left: 56px; font-size: 1.1rem; font-weight: 700; }
 .suggest {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px; list-style: none;
   background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
@@ -337,7 +341,7 @@ input, textarea {
 .addr-side { display: grid; gap: 8px; flex: 1; min-width: 220px; }
 .addr-title { color: var(--muted); }
 .addr-list { display: flex; flex-wrap: wrap; gap: 8px; }
-[data-addr] button {
+[data-addr] button, .remote-list button {
   font: inherit; font-weight: 700; font-size: 1rem; cursor: pointer; color: var(--accent);
   background: transparent; border: 1px dashed var(--accent); border-radius: 10px; padding: 8px 12px; min-height: 40px;
 }
@@ -379,6 +383,71 @@ label.mrow { cursor: pointer; }
 .mrow b { display: block; }
 .mrow small { display: block; color: var(--muted); font-size: .85rem; }
 .mrow input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--accent); flex: none; }
+
+/* Folder bertingkat: jejak lokasi, judul bagian, tombol Folder baru, panel Pilih folder */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: .82rem; color: var(--muted); min-width: 0; }
+.crumbs:empty { display: none; }
+.crumbs a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs .here { color: var(--text); font-weight: 700; }
+.sec-label { margin: 14px 4px 8px; font-size: .8rem; font-weight: 700; color: var(--muted); text-transform: none; }
+#subWrap .sec-label:first-child { margin-top: 0; }
+.newbtn { width: 44px; height: 42px; border-radius: 12px; color: var(--accent); }
+.tbar .newbtn { margin-left: auto; }
+.ftools .tbar .newbtn { margin-left: 0; }
+.btn.dashed { border: 1.5px dashed var(--accent); color: var(--accent); background: transparent; }
+.where { margin: 0; }
+.pick-dlg .dlg-body { gap: 8px; }
+.pick-head { display: flex; align-items: center; gap: 8px; }
+.pick-head h3 { flex: 1; }
+.pick-list { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow: auto; }
+.pick-list li + li { border-top: 1px solid var(--line2); }
+.pick-row {
+  appearance: none; border: 0; background: none; font: inherit; color: var(--text); cursor: pointer; text-align: left;
+  width: 100%; display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 6px 4px; border-radius: 12px;
+}
+.pick-row:hover { background: var(--bg); }
+.pick-row > svg { color: var(--muted); flex: none; }
+.pick-row .fic { width: 38px; height: 38px; }
+.pick-ok { min-height: 50px; font-size: 1rem; }
+.pick-list .empty { padding: 18px 8px; }
+
+/* Khusus laptop: lokasi penyimpanan, Selamat datang, kartu APK, versi perangkat */
+.store-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 0 4px; }
+.store-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 30px; padding: 2px 12px; border-radius: 999px; background: var(--soft); color: var(--deep); font-size: .85rem; font-weight: 700; overflow: hidden; }
+.store-chip > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-chip.cloud { background: color-mix(in srgb, #3b82f6 16%, var(--card)); color: color-mix(in srgb, #1d4ed8 80%, var(--text)); }
+.store-chip svg { flex: none; }
+.welcome { max-width: 1180px; display: grid; gap: 16px; }
+.wel-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
+.wel-head h2 { font-size: 1.5rem; font-weight: 800; }
+.wel-head p { margin: 2px 0 0; }
+.wel-head .btn { min-height: 48px; padding: 0 22px; }
+.wel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; align-items: start; }
+.wel-card { padding: 20px; display: grid; gap: 12px; }
+.wel-step { display: flex; align-items: center; gap: 12px; }
+.wel-step h3 { font-size: 1.05rem; }
+.wel-step p { margin: 0; }
+.wel-n { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--soft); color: var(--accent); }
+.wel-n.done { background: color-mix(in srgb, var(--ok) 18%, var(--card)); color: var(--ok); }
+.store-box { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: var(--bg); }
+.store-box b { display: block; overflow-wrap: anywhere; }
+.store-box small { display: block; }
+.store-ic { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--soft); color: var(--accent); }
+.store-ic.cloud { background: color-mix(in srgb, #3b82f6 16%, var(--card)); color: #1d4ed8; }
+.wel-card .store-change { justify-self: start; }
+.wel-card .addr-wrap { justify-content: flex-start; }
+.apk-card .btn, [data-apk] .btn { justify-self: start; }
+.store-actions { flex-wrap: wrap; }
+.dev-row.dev-old { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, var(--card)); }
+.dev-old-note { font-size: 12px; color: var(--warn); font-weight: 600; }
+
+/* Kartu Tailscale (dari luar jaringan) */
+.tag { display: inline-block; vertical-align: middle; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--deep); font-size: .72rem; font-weight: 700; }
+.remote-list button { font-size: .9rem; }
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; font-size: .92rem; }
+
+.ver-line { margin: 6px 0 0; text-align: center; white-space: pre-line; overflow-wrap: anywhere; }
 
 /* Pilihan tampilan di Pengaturan */
 .theme-row { flex-wrap: wrap; }

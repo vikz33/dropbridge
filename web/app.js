@@ -36,6 +36,12 @@
   let filesSig = '';
   let clipsSig = '';
   let pcName = '';
+  let remoteUrls = [];
+  let storageDir = '';
+  let android = { available: false, version: '' };
+  let welcomeDue = false;
+  let remoteName = '';
+  let via = 'lan';
   let online = true;
   let devInfo = { online: 0, devices: [] };
 
@@ -73,12 +79,21 @@
   };
 
   // Perkiraan pembersihan nama folder di sisi HP. Server tetap yang menentukan.
-  const cleanFolder = (s) => s
+  // Satu nama folder (tanpa /), sama dengan aturan server
+  const cleanPart = (s) => s
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^[. ]+|[. ]+$/g, '')
     .slice(0, 100);
+  // Jalur folder bertingkat: "A/B/C" (boleh pakai \), bagian kosong dibuang
+  const cleanFolder = (s) => s.split(/[\/\\]/).map(cleanPart).filter(Boolean).join('/');
+  const MAX_DEPTH = 3;
+  const depthOf = (p) => (p ? p.split('/').length : 0);
+  const labelOf = (p) => p.split('/').pop();
+  const parentOf = (p) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
+  const pathLabel = (p) => (p ? p.split('/').join(' › ') : 'Tanpa folder');
+  const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
 
   // Apakah a dan b hanya berbeda satu huruf (tambah/kurang/ganti)?
   function withinOneEdit(a, b) {
@@ -173,12 +188,13 @@
     const t = $('#statusText');
     if (!online) { t.textContent = 'Terputus dari ' + pcLabel() + ' · cek Wi-Fi'; return; }
     const n = devInfo.online || 0;
-    t.textContent = isOnPc ? `${n} perangkat terhubung` : `Terhubung ke ${pcLabel()}`;
+    // Jalur sambungan: Wi-Fi/hotspot yang sama (tanpa internet) atau Tailscale (lewat internet)
+    t.textContent = isOnPc ? `${n} perangkat terhubung` : `Terhubung ke ${pcLabel()}` + (via === 'tailscale' ? ' · lewat internet (Tailscale)' : ' · Wi-Fi lokal, tanpa internet');
   }
 
   function setTitle() {
     const where = isOnPc ? 'PC ini' : pcLabel();
-    const page = route.type === 'send' ? 'Kirim ke ' + where : route.type === 'more' ? 'Hubungkan' : 'File di ' + where;
+    const page = route.type === 'send' ? 'Kirim ke ' + where : route.type === 'more' ? 'Hubungkan' : route.type === 'welcome' ? 'Selamat datang' : 'File di ' + where;
     $('#pageTitle').textContent = page;
     document.title = page + ' · DropBridge';
   }
@@ -235,11 +251,40 @@
     }
   }
 
+  // Kartu "Dari luar jaringan" (Tailscale): QR alamat 100.x, atau langkah memasang
+  function renderRemote() {
+    const has = remoteUrls.length > 0;
+    $('#remoteCard').hidden = !has && !isOnPc;
+    $('#remoteOn').hidden = !has;
+    $('#remoteOff').hidden = has;
+    if (!has) return;
+    $('#remoteQr').src = '/api/qr?remote=1&pin=1&t=' + Date.now();
+    const list = remoteName ? [...remoteUrls, `http://${remoteName}:${location.port || 8000}`] : remoteUrls;
+    $('#remoteList').replaceChildren(...list.map((u) => el('button', {
+      type: 'button', text: u,
+      onclick: async () => toast((await copyText(u)) ? 'Alamat disalin' : 'Gagal menyalin'),
+    })));
+  }
+
   async function loadInfo() {
     try {
       const r = await fetch('/api/info');
       const d = await r.json();
       urls = d.urls || [];
+      remoteUrls = d.remote_urls || [];
+      remoteName = d.remote_name || '';
+      via = d.via || 'lan';
+      storageDir = d.storage_dir || '';
+      android = d.android || android;
+      welcomeDue = !!d.welcome;
+      $('#notifyRow').hidden = d.notify == null;
+      if (d.notify != null) $('#notifyChk').checked = !!d.notify;
+      renderStore();
+      renderApk();
+      // Versi terpasang yang baru dipasang/diperbarui: tampilkan Selamat datang sekali
+      if (welcomeDue && isOnPc && !location.hash) location.hash = '#/selamat-datang';
+      $('#verLine').textContent = 'DropBridge PC versi ' + (d.version || '?') + (pcName ? ' · ' + pcName : '')
+        + (d.storage_dir ? '\nDisimpan di: ' + d.storage_dir : '');
       if (d.this_pc) isOnPc = true;
       if (d.pc_name) pcName = d.pc_name;
       maxMB = d.max_upload_mb || maxMB;
@@ -248,6 +293,7 @@
       $('#shrinkRow').hidden = photoMaxKB <= 0;
       renderShrink();
       renderAddr();
+      renderRemote();
       setTitle();
       renderStatus();
     } catch { /* tidak kritis */ }
@@ -278,7 +324,7 @@
           tabindex: '-1',
           onmousedown: (e) => e.preventDefault(), // jangan hilangkan fokus dari input
           onclick: () => choose(f.name),
-        }, el('span', { text: f.name }), el('span', { class: 'cnt', text: f.count + ' file' })))));
+        }, el('span', { text: pathLabel(f.name) }), el('span', { class: 'cnt', text: f.count + ' file' })))));
       active = -1;
       list.hidden = false;
     }
@@ -294,21 +340,25 @@
       if (!raw.trim()) return;
       const cleaned = cleanFolder(raw);
       if (!cleaned) { hintEl.classList.add('warn'); hintEl.textContent = 'Nama folder tidak valid.'; return; }
+      if (depthOf(cleaned) > MAX_DEPTH) { hintEl.classList.add('warn'); hintEl.textContent = `Paling banyak ${MAX_DEPTH} tingkat folder, mis. Kontainer/Pos/Tanggal.`; return; }
       const parts = [];
       const exist = findFolder(cleaned);
-      if (cleaned !== raw.trim()) parts.push(el('div', { class: 'sub', text: 'Nama disesuaikan menjadi: ' + cleaned }));
+      if (cleaned !== raw.trim() && cleaned !== raw.trim().replace(/\s*[\/\\]\s*/g, '/')) parts.push(el('div', { class: 'sub', text: 'Nama disesuaikan menjadi: ' + pathLabel(cleaned) }));
       if (exist) {
         hintEl.classList.add('ok');
         parts.unshift(el('div', { text: `Folder sudah ada · ${exist.count} file` }));
       } else {
-        parts.unshift(el('div', { text: 'Folder baru, dibuat saat file dikirim.' }));
+        const par = parentOf(cleaned);
+        parts.unshift(el('div', { text: par
+          ? `Subfolder baru di ${pathLabel(findFolder(par) ? findFolder(par).name : par)}, dibuat saat file dikirim.`
+          : 'Folder baru, dibuat saat file dikirim.' }));
         if (cleaned.length >= 4) {
           const sim = folders.filter((f) => withinOneEdit(f.name, cleaned)).slice(0, 3);
           if (sim.length) {
             hintEl.classList.add('warn');
             parts.push(el('div', {},
               'Mirip dengan: ',
-              sim.map((f) => el('button', { type: 'button', class: 'link', text: f.name, onclick: () => choose(f.name) })),
+              sim.map((f) => el('button', { type: 'button', class: 'link', text: pathLabel(f.name), onclick: () => choose(f.name) })),
               ' — salah ketik?'));
           }
         }
@@ -345,6 +395,7 @@
     }
     if (h === '#/folders') return { type: 'home', name: '' };
     if (h === '#/hubungkan' || h === '#/lainnya') return { type: 'more', name: '' };
+    if (h === '#/selamat-datang') return { type: 'welcome', name: '' };
     return { type: 'send', name: '' };
   }
 
@@ -355,7 +406,9 @@
     files = [];
     filesSig = '';
     const home = route.type === 'home';
-    const page = route.type === 'send' ? 'send' : route.type === 'more' ? 'more' : 'folders';
+    const page = route.type === 'send' ? 'send' : route.type === 'more' ? 'more' : route.type === 'welcome' ? 'welcome' : 'folders';
+    $('#pageWelcome').hidden = page !== 'welcome';
+    if (page === 'welcome') loadStorage();
     $('#pageSend').hidden = page !== 'send';
     $('#pageFolders').hidden = page !== 'folders';
     $('#pageMore').hidden = page !== 'more';
@@ -373,9 +426,13 @@
     }
     if (inFolder()) {
       const root = route.type === 'root';
-      $('#fvTitle').textContent = root ? 'Tanpa folder' : route.name;
+      $('#fvTitle').textContent = root ? 'Tanpa folder' : labelOf(route.name);
       $('#fvMeta').textContent = '';
       $('#fvMenu').hidden = root;
+      $('#gNew').hidden = root || depthOf(route.name) >= MAX_DEPTH;
+      $('.back', $('#folderView')).href = root || !parentOf(route.name) ? '#/folders' : '#/f/' + enc(parentOf(route.name));
+      renderCrumbs();
+      renderSubs();
       $('#grid').replaceChildren();
       loadFiles().catch(() => {});
     } else if (home) {
@@ -383,6 +440,7 @@
     } else if (route.type === 'more') {
       $('#qrOff').hidden = !!urls.length;
       renderDevices();
+      loadInfo();
     } else if (route.type === 'send') {
       loadRecent().catch(() => {});
     }
@@ -403,6 +461,8 @@
       sendCombo.updateHint();
       renderChips();
       if (route.type === 'home') renderHome();
+      if (route.type === 'folder') { renderSubs(); renderMeta(); }
+      if ($('#pickDlg').open) renderPick();
     }
   }
 
@@ -418,7 +478,7 @@
     box.append(el('span', { class: 'chips-label', text: 'Terakhir:' }));
     for (const f of recent) {
       box.append(el('button', {
-        type: 'button', class: 'chip', text: f.name, title: f.name,
+        type: 'button', class: 'chip', text: pathLabel(f.name), title: pathLabel(f.name),
         onclick: () => { setTarget(f.name); store.set('db_target', f.name); },
       }));
     }
@@ -436,6 +496,8 @@
     trash: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
     share: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>',
     check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
+    newf: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10.5v5M9.5 13h5"/></svg>',
+    chev: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
     play: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
   };
 
@@ -521,7 +583,7 @@
     $('#sortOpts').replaceChildren(...SORTS[kind].map(([key, label]) => el('button', {
       type: 'button', role: 'radio', class: 'sort-opt', 'aria-checked': key === cur ? 'true' : 'false',
       onclick: () => {
-        if (sortKind === 'folder') { pref.folderSort = key; store.set('db_fsort', key); renderHome(); }
+        if (sortKind === 'folder') { pref.folderSort = key; store.set('db_fsort', key); renderHome(); renderSubs(); }
         else { pref.fileSort = key; store.set('db_gsort', key); renderGrid(); }
         syncTools();
         $('#sortDlg').close();
@@ -545,7 +607,7 @@
     $('#folderList').classList.toggle('grid-view', pref.folderView === 'grid');
     $('#grid').classList.toggle('list-view', pref.fileView === 'list');
   }
-  const setFolderView = (v) => { pref.folderView = v; store.set('db_allview', v); syncTools(); renderHome(); };
+  const setFolderView = (v) => { pref.folderView = v; store.set('db_allview', v); syncTools(); renderHome(); renderSubs(); };
   const setFileView = (v) => { pref.fileView = v; store.set('db_gview', v); syncTools(); renderGrid(); };
   $('#fgList').addEventListener('click', () => setFolderView('list'));
   $('#fgGrid').addEventListener('click', () => setFolderView('grid'));
@@ -573,13 +635,15 @@
 
   function folderMenu(f, btn) {
     const items = [{ label: 'Kirim ke sini', icon: IC.up, onclick: () => sendTo(f.name) }];
-    if (!f.root) items.push({ label: 'Unduh semua (ZIP)', icon: IC.down, href: '/api/folders/' + enc(f.name) + '/zip', download: f.name + '.zip' });
+    if (!f.root && depthOf(f.name) < MAX_DEPTH) items.push({ label: 'Folder baru di dalamnya', icon: IC.newf, onclick: () => openNew(f.name) });
+    if (!f.root) items.push({ label: 'Unduh semua (ZIP)', icon: IC.down, href: '/api/folders/' + encPath(f.name) + '/zip', download: labelOf(f.name) + '.zip' });
     openMenu(btn, items);
   }
 
-  function folderItem(f) {
+  function folderItem(f, fullPath = false) {
     const href = f.root ? '#/root' : '#/f/' + enc(f.name);
-    const sub = `${f.count} file · ${fmtSize(f.size)}` + (f.modified && !f.root ? ' · ' + fmtTime(f.modified) : '');
+    const sub = (f.subs ? `${f.subs} folder · ` : '') + `${f.count} file · ${fmtSize(f.size)}` + (f.modified && !f.root ? ' · ' + fmtTime(f.modified) : '');
+    const shown = f.root ? f.name : fullPath ? pathLabel(f.name) : labelOf(f.name);
     const dots = el('button', {
       type: 'button', class: 'dots', 'aria-label': 'Pilihan untuk ' + f.name, 'aria-haspopup': 'menu', 'aria-expanded': 'false',
       onclick: (e) => folderMenu(f, e.currentTarget),
@@ -588,7 +652,7 @@
       el('a', { class: 'frow-main', href },
         el('span', { class: 'fic' }, svg(IC.folder)),
         el('span', { class: 'meta' },
-          el('span', { class: 'name', text: f.name, title: f.name }),
+          el('span', { class: 'name', text: shown, title: pathLabel(f.name) }),
           el('span', { class: 'sub', text: sub }))),
       dots);
   }
@@ -597,8 +661,9 @@
     const list = $('#folderList');
     const q = $('#fSearch').value.trim().toLowerCase();
     list.replaceChildren();
-    const shown = sortBy(folders.filter((x) => !q || x.name.toLowerCase().includes(q)), pref.folderSort);
-    for (const f of shown) list.append(folderItem(f));
+    // Tanpa pencarian: folder tingkat atas saja. Dengan pencarian: semua tingkat, tampil jalur lengkap.
+    const shown = sortBy(folders.filter((x) => (q ? x.name.toLowerCase().includes(q) : !x.parent)), pref.folderSort);
+    for (const f of shown) list.append(folderItem(f, !!q));
     if (rootInfo.count > 0 && (!q || 'tanpa folder'.includes(q))) {
       list.append(folderItem({ name: 'Tanpa folder', root: true, count: rootInfo.count, size: rootInfo.size, modified: rootInfo.modified }));
     }
@@ -629,6 +694,34 @@
     if (sig !== filesSig) { filesSig = sig; renderGrid(); }
   }
 
+  const childrenOf = (p) => folders.filter((f) => (f.parent || '') === p);
+
+  function renderCrumbs() {
+    const nav = $('#fvCrumbs');
+    nav.replaceChildren();
+    if (route.type !== 'folder') return;
+    const parts = route.name.split('/');
+    nav.append(el('a', { href: '#/folders', text: 'File' }));
+    parts.forEach((x, i) => {
+      nav.append(el('span', { 'aria-hidden': 'true', text: '›' }));
+      const p = parts.slice(0, i + 1).join('/');
+      nav.append(i === parts.length - 1 ? el('span', { class: 'here', text: x, 'aria-current': 'page' }) : el('a', { href: '#/f/' + enc(p), text: x }));
+    });
+  }
+
+  function renderSubs() {
+    const subs = route.type === 'folder' ? sortBy(childrenOf(route.name), pref.folderSort) : [];
+    $('#subWrap').hidden = !subs.length;
+    $('#subList').classList.toggle('grid-view', pref.folderView === 'grid');
+    $('#subList').replaceChildren(...subs.map((f) => folderItem(f)));
+  }
+
+  function renderMeta() {
+    const subs = route.type === 'folder' ? childrenOf(route.name).length : 0;
+    const total = files.reduce((n, f) => n + f.size, 0);
+    $('#fvMeta').textContent = (subs ? `${subs} folder · ` : '') + `${files.length} file · ${fmtSize(total)}`;
+  }
+
   const fileUrl = (f, folder) => '/api/files/' + enc(f.name) + '?folder=' + enc(folder);
 
   function fileMenu(f, btn) {
@@ -654,10 +747,10 @@
   function renderGrid() {
     const grid = $('#grid');
     grid.replaceChildren();
-    const total = files.reduce((n, f) => n + f.size, 0);
-    $('#fvMeta').textContent = `${files.length} file · ${fmtSize(total)}`;
+    renderMeta();
+    $('#fileLabel').hidden = !files.length;
     if (!files.length) {
-      grid.append(el('div', { class: 'empty', text: 'Folder ini kosong.' }));
+      if ($('#subWrap').hidden) grid.append(el('div', { class: 'empty', text: 'Folder ini kosong. Ketuk Kirim ke folder ini, atau buat subfolder dengan ikon folder+.' }));
       return;
     }
     const folder = curFolder();
@@ -705,7 +798,8 @@
   $('#fvMenu').addEventListener('click', (e) => {
     if (route.type !== 'folder') return;
     openMenu(e.currentTarget, [
-      { label: 'Unduh semua (ZIP)', icon: IC.down, href: '/api/folders/' + enc(route.name) + '/zip', download: route.name + '.zip' },
+      ...(storageDir ? [{ label: 'Buka di File Explorer', icon: IC.folder, onclick: () => openExplorer(route.name) }] : []),
+      { label: 'Unduh semua (ZIP)', icon: IC.down, href: '/api/folders/' + encPath(route.name) + '/zip', download: labelOf(route.name) + '.zip' },
       { label: 'Ganti nama', icon: IC.edit, onclick: renameFolder },
       { label: 'Hapus folder', icon: IC.trash, danger: true, onclick: deleteFolder },
     ]);
@@ -713,10 +807,10 @@
 
   async function renameFolder() {
     const old = route.name;
-    const next = prompt('Nama baru untuk folder ini:', old);
-    if (next == null || !next.trim() || next.trim() === old) return;
+    const next = prompt('Nama baru untuk folder ini:', labelOf(old));
+    if (next == null || !next.trim() || next.trim() === labelOf(old)) return;
     try {
-      const d = await api('/api/folders/' + enc(old), { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ name: next }) });
+      const d = await api('/api/folders/' + encPath(old), { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ name: next }) });
       if ($('#folderInput').value === old) { setTarget(d.name); store.set('db_target', d.name); }
       toast('Nama folder diganti');
       location.hash = '#/f/' + enc(d.name);
@@ -726,16 +820,17 @@
 
   async function deleteFolder() {
     const name = route.name;
+    if (childrenOf(name).length) { toast('Folder ini berisi subfolder. Hapus subfoldernya dulu.', 'err'); return; }
     let count = files.length;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const ok = confirm(`Hapus folder "${name}" beserta ${count} file di dalamnya dari PC?\n\nTindakan ini permanen dan tidak bisa dibatalkan.`);
+      const ok = confirm(`Hapus folder "${pathLabel(name)}" beserta ${count} file di dalamnya dari PC?\n\nTindakan ini permanen dan tidak bisa dibatalkan.`);
       if (!ok) return;
       try {
-        await api('/api/folders/' + enc(name) + '?expect=' + count, { method: 'DELETE' });
+        await api('/api/folders/' + encPath(name) + '?expect=' + count, { method: 'DELETE' });
         if ($('#folderInput').value === name) setTarget('');
         if (store.get('db_target') === name) store.set('db_target', '');
         toast('Folder dihapus');
-        location.hash = '#/folders';
+        location.hash = parentOf(name) ? '#/f/' + enc(parentOf(name)) : '#/folders';
         loadFolders().catch(() => {});
         return;
       } catch (e) {
@@ -865,7 +960,7 @@
       $('#rootDlg').showModal();
       return false;
     }
-    const where = folder || 'Tanpa folder';
+    const where = pathLabel(folder);
     for (const file of arr) {
       // Folder tujuan selalu terlihat di baris, juga saat mengirim atau gagal
       const dest = el('span', { class: 'up-dest', title: 'Folder tujuan: ' + where });
@@ -1201,6 +1296,199 @@
   $('#modeFile').addEventListener('click', () => setMode('file'));
   $('#modeText').addEventListener('click', () => setMode('text'));
 
+  // ---------- Folder baru (ikon folder+) ----------
+  let newParent = '';
+  let newDone = null;
+  // after(path): dipanggil setelah folder dibuat; bawaan = buka folder baru itu
+  function openNew(parent, after) {
+    newParent = parent || '';
+    newDone = after || ((p) => { location.hash = '#/f/' + enc(p); });
+    $('#newWhere').textContent = 'di ' + (newParent ? 'File › ' + pathLabel(newParent) : 'File (tingkat atas)');
+    $('#newName').value = '';
+    $('#newErr').textContent = '';
+    $('#newDlg').showModal();
+    $('#newName').focus();
+  }
+  $('#fNew').addEventListener('click', () => openNew(''));
+  $('#gNew').addEventListener('click', () => openNew(curFolder()));
+  $('#newCancel').addEventListener('click', () => $('#newDlg').close());
+  $('#newForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nm = cleanPart($('#newName').value);
+    if (!nm) { $('#newErr').textContent = 'Isi nama folder.'; return; }
+    if ($('#newName').value.includes('/') || $('#newName').value.includes('\\')) { $('#newErr').textContent = 'Nama folder tidak boleh berisi / atau \\.'; return; }
+    const full = newParent ? newParent + '/' + nm : nm;
+    try {
+      const d = await api('/api/folders', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ name: full }) });
+      $('#newDlg').close();
+      toast(d.created ? 'Folder dibuat: ' + pathLabel(d.name) : 'Folder sudah ada: ' + pathLabel(d.name));
+      await loadFolders().catch(() => {});
+      if (newDone) newDone(d.name);
+    } catch (err) { $('#newErr').textContent = err.message; }
+  });
+
+  // ---------- Panel Pilih folder (halaman Kirim) ----------
+  let pickPath = '';
+  function renderPick() {
+    const nav = $('#pickCrumbs');
+    nav.replaceChildren(el('button', { type: 'button', class: 'link', text: 'File', onclick: () => { pickPath = ''; renderPick(); } }));
+    if (pickPath) {
+      const parts = pickPath.split('/');
+      parts.forEach((x, i) => {
+        nav.append(el('span', { 'aria-hidden': 'true', text: ' › ' }));
+        const p = parts.slice(0, i + 1).join('/');
+        nav.append(i === parts.length - 1 ? el('b', { text: x }) : el('button', { type: 'button', class: 'link', text: x, onclick: () => { pickPath = p; renderPick(); } }));
+      });
+    }
+    const kids = sortBy(childrenOf(pickPath), 'az');
+    $('#pickList').replaceChildren(...(kids.length ? kids.map((f) => el('li', {},
+      el('button', { type: 'button', class: 'pick-row', onclick: () => { pickPath = f.name; renderPick(); } },
+        el('span', { class: 'fic' }, svg(IC.folder)),
+        el('span', { class: 'meta' },
+          el('span', { class: 'name', text: labelOf(f.name) }),
+          el('span', { class: 'sub', text: (f.subs ? `${f.subs} folder · ` : '') + `${f.count} file` })),
+        svg(IC.chev)))) : [el('li', { class: 'empty', text: pickPath ? 'Belum ada subfolder di sini.' : 'Belum ada folder.' })]));
+    $('#pickUp').hidden = !pickPath;
+    $('#pickOk').hidden = !pickPath;
+    $('#pickOk').textContent = 'Pilih ' + (pickPath ? labelOf(pickPath) : '');
+    $('#pickNew').hidden = depthOf(pickPath) >= MAX_DEPTH;
+  }
+  $('#pickBtn').addEventListener('click', () => {
+    const cur = cleanFolder($('#folderInput').value || '');
+    // Mulai dari folder tujuan sekarang (bila ada), supaya gampang pilih subfoldernya
+    pickPath = cur && findFolder(cur) ? findFolder(cur).name : (cur && findFolder(parentOf(cur)) ? findFolder(parentOf(cur)).name : '');
+    renderPick();
+    $('#pickDlg').showModal();
+  });
+  $('#pickUp').addEventListener('click', () => { pickPath = parentOf(pickPath); renderPick(); });
+  $('#pickClose').addEventListener('click', () => $('#pickDlg').close());
+  $('#pickDlg').addEventListener('click', (e) => { if (e.target.id === 'pickDlg') e.target.close(); });
+  $('#pickOk').addEventListener('click', () => {
+    if (!pickPath) return;
+    setTarget(pickPath);
+    store.set('db_target', pickPath);
+    $('#pickDlg').close();
+  });
+  $('#pickNew').addEventListener('click', () => {
+    openNew(pickPath, (p) => {
+      setTarget(p);
+      store.set('db_target', p);
+      $('#pickDlg').close();
+    });
+  });
+
+  // ---------- Khusus laptop/PC ini: folder penyimpanan, Explorer, Selamat datang ----------
+  // Ringkas jalur panjang: "C:\Users\x\OneDrive - Kantor\DropBridge" -> "OneDrive - Kantor › DropBridge"
+  function shortPath(p) {
+    const parts = p.split(/[\\/]/).filter(Boolean);
+    const od = parts.findIndex((x) => /^OneDrive/i.test(x));
+    return (od >= 0 ? parts.slice(od) : parts.slice(-2)).join(' › ');
+  }
+  const isCloud = (p) => /OneDrive|Google Drive|Dropbox/i.test(p);
+  const ICON_CLOUD = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 9.5 4.25 4.25 0 0 0 7 18z"/></svg>';
+
+  function renderStore() {
+    $('#storeLine').hidden = !storageDir;
+    if (!storageDir) return;
+    $('#storePath').textContent = shortPath(storageDir);
+    $('#storeChip').title = storageDir;
+    $('#storeChip').classList.toggle('cloud', isCloud(storageDir));
+    $('#storeIc').replaceChildren(svg(isCloud(storageDir) ? ICON_CLOUD : IC.folder));
+  }
+
+  async function loadStorage() {
+    try {
+      const d = await api('/api/storage');
+      $('#welStore').textContent = shortPath(d.path);
+      $('#welStore').title = d.path;
+      $('#welStoreIc').replaceChildren(svg(isCloud(d.path) ? ICON_CLOUD : IC.folder));
+      $('#welStoreIc').classList.toggle('cloud', isCloud(d.path));
+      $('#welStoreSub').textContent = (d.imported_from ? 'Diimpor dari pengaturan lama · ' : '') + d.files + ' file' + (isCloud(d.path) ? ' · tersinkron ke cloud' : '');
+    } catch { /* bukan dari PC ini */ }
+  }
+
+  let storeTarget = '';
+  async function changeStorage() {
+    toast('Pilih folder di jendela yang terbuka…');
+    let r;
+    try { r = await api('/api/storage/pick', { method: 'POST' }); } catch (err) { toast(err.message, 'err'); return; }
+    if (!r.path) return;
+    if (r.error) { toast(r.error, 'err'); return; }
+    storeTarget = r.path;
+    if (r.files > 0) {
+      $('#storeAsk').textContent = `Simpan kiriman baru di ${shortPath(r.path)}. Pindahkan juga ${r.files} file yang sudah ada ke sana? File yang sudah ada di tujuan tidak ditimpa.`;
+      $('#storeDlg').showModal();
+    } else {
+      doSwitch(false);
+    }
+  }
+  async function doSwitch(move) {
+    $('#storeDlg').close();
+    try {
+      const rep = await api('/api/storage', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ path: storeTarget, move }) });
+      let msg = 'Disimpan di ' + shortPath(rep.path);
+      if (move) msg += ` · ${rep.moved} file dipindah` + (rep.same ? `, ${rep.same} kembar dilewati` : '') + (rep.clash ? `, ${rep.clash} dibiarkan (nama sama, isi beda)` : '');
+      toast(msg);
+      await loadInfo();
+      loadFolders().catch(() => {});
+      if (route.type === 'welcome') loadStorage();
+    } catch (err) { toast(err.message, 'err'); }
+  }
+  for (const b of $$('.store-change')) b.addEventListener('click', changeStorage);
+  $('#storeMove').addEventListener('click', () => doSwitch(true));
+  $('#storeNew').addEventListener('click', () => doSwitch(false));
+  $('#storeCancel').addEventListener('click', () => $('#storeDlg').close());
+  window.addEventListener('db-storage-changed', async () => { await loadInfo(); loadFolders().catch(() => {}); });
+
+  async function openExplorer(folder) {
+    try { await api('/api/storage/open', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ folder }) }); }
+    catch (err) { toast(err.message, 'err'); }
+  }
+
+  $('#notifyChk').addEventListener('change', async (e) => {
+    try { await api('/api/settings/notify', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ on: e.target.checked }) }); }
+    catch (err) { toast(err.message, 'err'); e.target.checked = !e.target.checked; }
+  });
+
+  $('#welDone').addEventListener('click', async () => {
+    try { await api('/api/welcomed', { method: 'POST' }); } catch { /* tetap lanjut */ }
+    welcomeDue = false;
+    location.hash = '#/';
+  });
+
+  // ---------- Aplikasi Android: QR unduh dari PC ini (atau tombol langsung di HP Android) ----------
+  const mm = (v) => (v || '0.0').split('.').slice(0, 2).map(Number);
+  const appOld = (v) => {
+    if (!v || !android.version) return false;
+    const [a1, a2] = mm(v); const [b1, b2] = mm(android.version);
+    return a1 < b1 || (a1 === b1 && a2 < b2);
+  };
+  function renderApk() {
+    const isAndroidPhone = /Android/i.test(navigator.userAgent) && !isOnPc;
+    $('#apkCard').hidden = !android.available || (!isOnPc && !isAndroidPhone);
+    $('#apkTag').textContent = android.version || '';
+    for (const box of $$('[data-apk]')) {
+      box.replaceChildren();
+      if (!android.available) {
+        box.append(el('p', { class: 'muted small', text: 'APK belum ada di PC ini. Bangun dengan build_apk.bat, atau pakai DropBridge lewat browser HP.' }));
+        continue;
+      }
+      const name = `DropBridge-${android.version}.apk`;
+      const dl = el('a', { class: 'btn primary', href: '/api/app/android', download: name }, svg(IC.down), el('span', { text: isOnPc ? 'Unduh ' + name : 'Pasang aplikasi Android ' + android.version }));
+      if (isOnPc && urls.length) {
+        const img = el('img', { class: 'addr-qr', width: 168, height: 168, alt: 'Kode QR untuk mengunduh aplikasi Android', src: '/api/qr?apk=1&i=' + qrIdx + '&t=' + Date.now() });
+        box.append(el('div', { class: 'addr-wrap' },
+          el('div', { class: 'addr-qrbox' }, img, el('div', { class: 'addr-qrcap', text: 'Scan dengan kamera HP untuk mengunduh APK dari laptop ini, tanpa Play Store.' })),
+          el('div', { class: 'addr-side' },
+            el('b', { text: `DropBridge ${android.version} untuk Android` }),
+            el('p', { class: 'muted small', text: 'Versinya selalu cocok dengan DropBridge di laptop ini. Di HP, izinkan "Instal aplikasi tak dikenal" untuk browser, sekali saja.' }),
+            dl)));
+      } else {
+        box.append(el('p', { class: 'muted small', text: 'Untuk Foto langsung, antrean saat PC tak terjangkau, dan kirim di latar belakang.' }), dl);
+      }
+    }
+  }
+
   // ---------- Tampilan terang / gelap ----------
   function applyTheme(t) {
     if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
@@ -1266,7 +1554,7 @@
           pic,
           el('span', { class: 'meta' },
             el('span', { class: 'name', text: f.name, title: f.name }),
-            el('span', { class: 'sub', text: (f.folder || 'Tanpa folder') + ' · ' + fmtTime(f.modified) })),
+            el('span', { class: 'sub', text: pathLabel(f.folder) + ' · ' + fmtTime(f.modified) })),
           el('span', { class: 'ok', title: 'Sudah di PC' }, svg(IC.check))));
     }));
     $('#recentCard').hidden = !d.files.length;
@@ -1338,11 +1626,12 @@
     const box = $('#devList');
     try {
       const d = await api('/api/devices');
-      box.replaceChildren(...d.devices.map((v) => el('div', { class: 'dev-row' },
+      box.replaceChildren(...d.devices.map((v) => el('div', { class: 'dev-row' + (appOld(v.app) ? ' dev-old' : '') },
         el('span', { class: 'dev-dot' + (v.online ? ' on' : ''), title: v.online ? 'Online' : 'Tidak aktif' }),
         el('div', { class: 'dev-info' },
           el('div', { class: 'dev-name', text: v.name + (v.current ? ' (perangkat ini)' : '') }),
-          el('div', { class: 'dev-sub muted', text: `${v.kind} · ${v.ip} · ${v.online ? 'online' : ago(v.last_seen)}` })),
+          el('div', { class: 'dev-sub muted', text: `${v.app ? 'Aplikasi ' + v.app : v.kind} · ${v.ip} · ${v.online ? 'online' : ago(v.last_seen)}` }),
+          appOld(v.app) ? el('div', { class: 'dev-old-note', text: `Versi lama. Perbarui ke ${android.version} lewat kartu Aplikasi Android.` }) : ''),
         v.current || !myLocal ? '' : el('button', {
           class: 'btn ghost small danger', type: 'button', text: 'Keluarkan',
           onclick: async () => {

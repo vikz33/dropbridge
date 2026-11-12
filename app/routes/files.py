@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.requests import ClientDisconnect
 from pydantic import BaseModel, Field
 
+from .. import events
 from ..auth import require_auth
 from ..config import settings
 from ..services import thumbs
@@ -129,6 +130,8 @@ async def upload_raw(
     final, dup = storage.commit(tmp, folder_name, clean)
     if last_modified and not dup:
         storage.set_mtime(folder_name, final, last_modified)
+    if not dup:
+        events.emit("file", folder_name, final)
     took = time.monotonic() - t0
     sent = size - offset
     note = " (sudah ada, tidak disimpan ulang)" if dup else ""
@@ -173,6 +176,8 @@ async def upload(
         final, dup = storage.commit(tmp, folder_name, name)
         if last_modified and len(files) == 1 and not dup:
             storage.set_mtime(folder_name, final, last_modified)
+        if not dup:
+            events.emit("file", folder_name, final)
         saved.append({"name": final, "size": size, "duplicate": dup})
     if errors and not saved:
         raise HTTPException(status_code=413, detail=errors[0])
