@@ -28,7 +28,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 
 [Messages]
-FinishedLabel=DropBridge {#MyVer} sudah terpasang.%n%nPengaturan lama dari C:\DropBridge (PIN, perangkat, folder penyimpanan) diimpor otomatis, jadi HP tidak perlu dihubungkan ulang.%n%nKalau DropBridge versi start.bat masih jalan, hentikan dulu lewat ikon tray > Berhenti.
+FinishedLabel=DropBridge {#MyVer} sudah terpasang.%n%nPengaturan sebelumnya (PIN, perangkat, folder penyimpanan) tetap dipakai, jadi HP tidak perlu dihubungkan ulang.%n%nKalau DropBridge versi start.bat masih jalan, hentikan dulu lewat ikon tray > Berhenti.
 
 [Tasks]
 Name: "autostart"; Description: "Jalankan otomatis saat Windows menyala"; GroupDescription: "Pilihan:"

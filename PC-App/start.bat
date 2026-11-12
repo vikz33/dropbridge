@@ -31,6 +31,13 @@ if exist ".venv\Scripts\python.exe" (
   ".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
   if errorlevel 1 rmdir /s /q ".venv"
 )
+REM Folder proyek dipindah (mis. ke C:\Dev): .venv menyimpan lokasi lama, jadi dibuat ulang.
+set "VLOC="
+if exist ".venv\lokasi.txt" set /p VLOC=<".venv\lokasi.txt"
+if exist ".venv\Scripts\python.exe" if /i not "%VLOC%"=="%~dp0" (
+  echo Folder DropBridge berpindah tempat, lingkungan Python disiapkan ulang...
+  rmdir /s /q ".venv"
+)
 
 if not exist ".venv\Scripts\python.exe" (
   echo Menyiapkan lingkungan, hanya sekali saja...
@@ -39,13 +46,14 @@ if not exist ".venv\Scripts\python.exe" (
     echo.
     echo Gagal membuat lingkungan Python. Pesan di atas menjelaskan sebabnya.
     echo Yang sering jadi penyebab:
-    echo   - Folder DropBridge masih di dalam file ZIP. Ekstrak dulu ke folder biasa, mis. C:\DropBridge
+    echo   - Folder DropBridge masih di dalam file ZIP. Ekstrak dulu ke folder biasa, mis. C:\Dev\DropBridge
     echo   - Folder ada di tempat yang tidak boleh ditulis ^(Program Files, folder sistem^).
     echo   - Antivirus memblokir. Coba matikan sebentar, lalu ulangi.
     if exist ".venv" rmdir /s /q ".venv"
     pause
     exit /b 1
   )
+  >".venv\lokasi.txt" echo %~dp0
 )
 
 ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt

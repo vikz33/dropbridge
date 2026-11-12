@@ -2,7 +2,7 @@ r"""Pengaturan DropBridge, dibaca dari config.json (dibuat otomatis jika belum a
 
 Pengaturan dan data selalu di %LOCALAPPDATA%\DropBridge, baik dijalankan dari kode (start.bat)
 maupun versi terpasang (DropBridge-Setup.exe). File kiriman bawaannya di Documents\DropBridge.
-Folder kode (C:\DropBridge) hanya berisi kode, tidak ada data pribadi.
+Folder kode (mis. C:\Dev\DropBridge) hanya berisi kode, tidak ada data pribadi.
 
 Struktur kode:  <root>\Web (tampilan), <root>\PC-App (folder ini), <root>\Android-App, <root>\Rilis
 """
