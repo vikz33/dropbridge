@@ -4,6 +4,7 @@ REM Membangun DropBridge Android menjadi APK.
 REM Hasil: ..\Rilis\DropBridge-<versi>.apk  (versi diambil dari versionName di app\build.gradle.kts)
 REM PC-App\build_exe.bat mengambil APK terbaru dari folder Rilis untuk dibungkus ke installer.
 REM Log build: build_log.txt
+REM "build_apk.bat nopause" = tanpa jeda di akhir (dipakai build_semua.bat di folder induk).
 if "%JAVA_HOME%"=="" set "JAVA_HOME=C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot"
 set "PROJ=%~dp0"
 set "LOG=%PROJ%build_log.txt"
@@ -32,5 +33,8 @@ if exist "%APK%" (
 ) else (
   echo.
   echo GAGAL. Kirim isi file ini ke Claude: %LOG%
+  if /i not "%~1"=="nopause" pause
+  exit /b 1
 )
-pause
+if /i not "%~1"=="nopause" pause
+exit /b 0

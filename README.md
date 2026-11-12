@@ -12,7 +12,12 @@ DropBridge/
   Android-App/   aplikasi Android (build_apk.bat)
   Rilis/         hasil jadi untuk dibagikan: DropBridge-Setup-<versi>.exe dan DropBridge-<versi>.apk
                  (tidak masuk Git)
+  build_semua.bat  build APK lalu installer PC sekaligus, hasil ke Rilis
 ```
+
+**Alur setiap pembaruan:** hentikan DropBridge (tray > Berhenti) > coba di `PC-App\start.bat` > kalau sudah oke,
+tray > Berhenti > klik ganda **build_semua.bat** > pasang `Rilis\DropBridge-Setup-<versi>.exe` > kalau Android ikut
+berubah, pasang APK baru di HP lewat QR di menu Hubungkan.
 
 Folder ini hanya berisi kode. Data pribadi disimpan di luar:
 
@@ -98,6 +103,8 @@ Sama seperti `build_apk.bat` untuk Android, `build_exe.bat` membuat "file jadi" 
 3. Klik dua kali **PC-App\build_exe.bat**. Hasil: `Rilis\DropBridge-Setup-<versi>.exe` (versi dari `PC-App\app\version.py`).
    Tanpa Inno Setup, programnya tetap jadi di `PC-App\dist\DropBridge\DropBridge.exe` dan bisa dicoba langsung.
    Log: `PC-App\build_exe_log.txt`.
+
+Paling mudah: **build_semua.bat** di folder induk menjalankan langkah 2 dan 3 sekaligus.
 
 Installer memasang ke Program Files, membuat pintasan Start Menu, mengizinkan DropBridge di Windows Firewall
 (Private dan Public, perlu untuk Tailscale), dan menawarkan jalan otomatis saat Windows menyala. Update: pasang

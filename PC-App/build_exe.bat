@@ -4,12 +4,13 @@ REM Membangun DropBridge PC menjadi installer: ..\Rilis\DropBridge-Setup-<versi>
 REM Versi diambil dari app\version.py. APK Android terbaru di ..\Rilis (hasil Android-App\build_apk.bat) ikut dibungkus.
 REM Perlu: start.bat pernah dijalankan (membuat .venv) dan Inno Setup 6 (winget install JRSoftware.InnoSetup).
 REM Log build: build_exe_log.txt
+REM "build_exe.bat nopause" = tanpa jeda di akhir (dipakai build_semua.bat di folder induk).
 cd /d "%~dp0"
 set "LOG=%~dp0build_exe_log.txt"
 
 if not exist ".venv\Scripts\python.exe" (
   echo Jalankan start.bat sekali dulu supaya lingkungan Python siap, lalu ulangi.
-  pause
+  if /i not "%~1"=="nopause" pause
   exit /b 1
 )
 
@@ -49,7 +50,7 @@ if not exist "%ISCC%" (
   echo lalu jalankan build_exe.bat lagi.
   echo.
   echo Programnya sudah jadi dan bisa dicoba tanpa installer: dist\DropBridge\DropBridge.exe
-  pause
+  if /i not "%~1"=="nopause" pause
   exit /b 1
 )
 set "DB_VERSION=%VER%"
@@ -58,11 +59,11 @@ if not exist "..\Rilis\DropBridge-Setup-%VER%.exe" goto gagal
 
 echo.
 echo BERHASIL. Installer versi %VER% ada di folder Rilis: DropBridge-Setup-%VER%.exe
-pause
+if /i not "%~1"=="nopause" pause
 exit /b 0
 
 :gagal
 echo.
 echo GAGAL. Kirim isi file ini ke Claude: %LOG%
-pause
+if /i not "%~1"=="nopause" pause
 exit /b 1
