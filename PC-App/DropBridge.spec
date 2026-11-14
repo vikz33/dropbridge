@@ -8,10 +8,17 @@ apk = os.environ.get("DB_APK", "")
 if apk and os.path.isfile(apk):
     datas.append((apk, "apk"))  # APK Android ikut terpasang, HP bisa mengunduhnya dari laptop
 
+import sys
+if sys.platform == "win32":
+    platform_mods = ["pystray._win32"]
+else:  # Linux: ikon panel lewat AppIndicator/GTK, jendela lewat WebKitGTK
+    platform_mods = ["pystray._appindicator", "pystray._gtk", "pystray._xorg", "webview.platforms.gtk"]
 hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("app")
-    + ["pystray._win32", "python_multipart", "multipart", "segno", "PIL.ImageDraw"]
+    + collect_submodules("send2trash")
+    + platform_mods
+    + ["python_multipart", "multipart", "segno", "PIL.ImageDraw"]
 )
 
 a = Analysis(
@@ -29,7 +36,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="DropBridge",
-    icon="build/dropbridge.ico",
+    icon="build/dropbridge.ico" if sys.platform == "win32" else None,
     console=False,
     upx=False,
 )

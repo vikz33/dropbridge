@@ -109,7 +109,7 @@ class BrowseActivity : Activity() {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         val c: Context = this
-        scr = Ui.screen(this, "File di PC", "Menyambung ke PC...", back = false, nav = Ui.TAB_FILES)
+        scr = Ui.screen(this, "File di PC", "Menyambung ke PC...", back = false, nav = Ui.TAB_FILES, onRefresh = { reload() })
         builtDark = Ui.dark
         status = Ui.text(c, "", 14f, true, Ui.DEEP).apply {
             setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 12))
@@ -141,19 +141,30 @@ class BrowseActivity : Activity() {
         }
     }
 
+    /** Ikon muat ulang di kepala layar. */
+    private fun reload() {
+        scr.spin(true)
+        if (base.isEmpty()) connectAndLoad() else load()
+    }
+
+    private var loadedAt = 0L
+    private fun stamp(): String =
+        if (loadedAt == 0L) "" else " · diperbarui " + java.text.SimpleDateFormat("HH.mm", java.util.Locale("id")).format(java.util.Date(loadedAt))
+
     private fun connectAndLoad() {
+        scr.spin(true)
         Thread {
             try {
                 val b = Net.ensureServer()
                 if (b == null) {
-                    runOnUiThread { scr.subtitle.text = "PC tidak ditemukan"; setStatus("PC tidak ditemukan. Pastikan start.bat jalan dan satu jaringan dengan HP.") }
+                    runOnUiThread { scr.spin(false); scr.subtitle.text = "PC tidak ditemukan"; setStatus("PC tidak ditemukan. Pastikan DropBridge jalan di PC dan satu jaringan dengan HP.") }
                     return@Thread
                 }
                 base = b
                 token = Net.ensureToken(b)
                 runOnUiThread { load() }
             } catch (e: Exception) {
-                runOnUiThread { setStatus("Gagal: ${e.message}") }
+                runOnUiThread { scr.spin(false); setStatus("Gagal: ${e.message}") }
             }
         }.start()
     }
@@ -177,8 +188,9 @@ class BrowseActivity : Activity() {
                 val r = d.optJSONObject("root")
                 val rootRow = if (r != null && r.optInt("count") > 0) FolderRow("Tanpa folder", r.optInt("count"), r.optLong("size"), r.optDouble("modified", 0.0), true) else null
                 Prefs.folders = rows.map { it.name }
+                loadedAt = System.currentTimeMillis()
                 if (f == null) {
-                    runOnUiThread { folders = rows; root = rootRow; if (folder == null) showFolders() }
+                    runOnUiThread { scr.spin(false); setStatus(""); folders = rows; root = rootRow; if (folder == null) showFolders() }
                 } else {
                     val fr = rows
                     val fd = Net.getJson(base, token, "/api/files?folder=" + Uri.encode(f))
@@ -188,10 +200,10 @@ class BrowseActivity : Activity() {
                         val o = farr.getJSONObject(i)
                         rows.add(FileRow(o.getString("name"), o.optLong("size"), o.optDouble("modified", 0.0), o.optString("kind", "other"), o.optBoolean("thumb")))
                     }
-                    runOnUiThread { folders = fr; root = rootRow; files = rows; if (folder == f) showFiles(f) }
+                    runOnUiThread { scr.spin(false); setStatus(""); folders = fr; root = rootRow; files = rows; if (folder == f) showFiles(f) }
                 }
             } catch (e: Exception) {
-                runOnUiThread { setStatus("Gagal memuat: ${e.message}") }
+                runOnUiThread { scr.spin(false); setStatus("Gagal memuat: ${e.message}") }
             }
         }.start()
     }
@@ -403,7 +415,7 @@ class BrowseActivity : Activity() {
         scr.title.text = "File di PC"
         scr.subtitle.visibility = View.VISIBLE
         val top = folders.count { it.parent.isEmpty() }
-        scr.subtitle.text = if (folders.isEmpty() && root == null) "Belum ada folder di PC" else "$top folder"
+        scr.subtitle.text = (if (folders.isEmpty() && root == null) "Belum ada folder di PC" else "$top folder") + stamp()
         val search = Ui.input(c, "Cari folder", android.text.InputType.TYPE_CLASS_TEXT, query)
         body.addView(search, Ui.lp(c, b = 6))
         body.addView(toolbar(c, folderSorts.first { it.first == folderSort }.second, folderGrid,
@@ -432,7 +444,6 @@ class BrowseActivity : Activity() {
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
         })
         fill()
-        body.addView(Ui.button(c, "Muat ulang", Ui.Kind.OUTLINE, 44) { load() }, Ui.lp(c, t = 12))
     }
 
     /** Folder sebagai daftar (satu kartu) atau ikon (2 kolom), sesuai pilihan tampilan. */
@@ -515,7 +526,7 @@ class BrowseActivity : Activity() {
         val c: Context = this
         body.removeAllViews()
         scr.title.text = "File di PC"
-        scr.subtitle.text = "${folders.count { it.parent.isEmpty() }} folder"
+        scr.subtitle.text = "${folders.count { it.parent.isEmpty() }} folder" + stamp()
         val label = if (f.isEmpty()) "Tanpa folder" else f.substringAfterLast('/')
         val parentPath = if (f.contains('/')) f.substringBeforeLast('/') else null
         val subs = if (f.isEmpty()) emptyList() else sorted(folders.filter { it.parent == f }, folderSort, { it.name }, { it.size }, { it.modified })

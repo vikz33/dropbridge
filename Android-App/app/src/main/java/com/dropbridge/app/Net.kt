@@ -81,10 +81,25 @@ object Net {
 
     // ---------- Menemukan PC ----------
 
+    /** Ada DropBridge di alamat ini, dan (bila PC sudah dipilih) memang PC yang sama? */
     private fun probe(base: String, timeoutMs: Int): Boolean = try {
         val r = request("GET", "$base/api/info", null, null, timeoutMs)
-        r.first == 200 && JSONObject(r.second).optString("name") == "DropBridge"
+        if (r.first != 200) false else {
+            val j = JSONObject(r.second)
+            j.optString("name") == "DropBridge" && isMine(j.optString("pc_id"), j.optString("pc_name"))
+        }
     } catch (e: Exception) { false }
+
+    /** PC hasil pencarian: alamat, kode tetap, nama komputer, sistem, versi. */
+    class Found(val base: String, val id: String, val host: String, val os: String, val version: String)
+
+    /** Cocok dengan PC yang sedang dipilih? PC lama (tanpa kode) dicocokkan lewat nama komputernya. */
+    private fun isMine(id: String, host: String): Boolean {
+        val want = Prefs.pcId
+        if (want.isEmpty()) return true
+        if (id.isNotEmpty()) return id == want
+        return host.isEmpty() || Prefs.pcName.isEmpty() || host.equals(Prefs.pcName, ignoreCase = true)
+    }
 
     private class Local(val name: String, val ip: String, val bcast: InetAddress?, val prefix: Int)
 
@@ -122,38 +137,45 @@ object Net {
         return (hot + all.filter { !hot.contains(it) }).map { it.ip }.distinct()
     }
 
-    /** Cara cepat: kirim siaran UDP, PC yang menjalankan DropBridge membalas. */
-    private fun udpDiscover(): String? {
+    /** Semua PC DropBridge di Wi-Fi ini (siaran UDP, ±2 detik). */
+    fun discoverAll(rounds: Int = 2): List<Found> {
+        val out = LinkedHashMap<String, Found>()
         val targets = ArrayList<InetAddress>()
         try { targets.add(InetAddress.getByName("255.255.255.255")) } catch (e: Exception) { /* abaikan */ }
         for (l in locals()) { val b = l.bcast; if (b != null) targets.add(b) }
-        val sock = try { DatagramSocket() } catch (e: Exception) { return null }
+        val sock = try { DatagramSocket() } catch (e: Exception) { return emptyList() }
         try {
             sock.broadcast = true
-            sock.soTimeout = 400
+            sock.soTimeout = 300
             val msg = "DROPBRIDGE?".toByteArray()
-            val buf = ByteArray(512)
-            for (round in 0 until 3) {
+            val buf = ByteArray(1024)
+            for (round in 0 until rounds) {
                 for (t in targets) {
                     try { sock.send(DatagramPacket(msg, msg.size, t, UDP_PORT)) } catch (e: Exception) { /* abaikan */ }
                 }
                 val end = System.currentTimeMillis() + 700
                 while (System.currentTimeMillis() < end) {
                     val p = DatagramPacket(buf, buf.size)
-                    try { sock.receive(p) } catch (e: SocketTimeoutException) { break }
+                    try { sock.receive(p) } catch (e: SocketTimeoutException) { continue }
                     try {
                         val j = JSONObject(String(p.data, 0, p.length))
                         if (j.optString("name") == "DropBridge") {
-                            return "http://${p.address.hostAddress}:${j.optInt("port", DEFAULT_PORT)}"
+                            val base = "http://${p.address.hostAddress}:${j.optInt("port", DEFAULT_PORT)}"
+                            val f = Found(base, j.optString("id"), j.optString("host"), j.optString("os"), j.optString("version"))
+                            out[f.id.ifEmpty { base }] = f
                         }
                     } catch (e: Exception) { /* bukan balasan kita */ }
                 }
             }
-        } catch (e: Exception) { /* jatuh ke pemindaian */ } finally {
+        } catch (e: Exception) { /* abaikan */ } finally {
             sock.close()
         }
-        return null
+        return out.values.toList()
     }
+
+    /** Cara cepat: siaran UDP; hanya PC yang sedang dipilih yang dipakai (tidak pindah ke PC lain). */
+    private fun udpDiscover(): String? =
+        discoverAll(3).firstOrNull { isMine(it.id, it.host) }?.base
 
     /** Cadangan: periksa semua alamat di jaringan yang sama (port 8000). */
     private fun scan(): String? {
@@ -172,7 +194,7 @@ object Net {
                 for (i in 1..254) {
                     val url = "http://$b.$i:$DEFAULT_PORT"
                     futures.add(pool.submit(Runnable {
-                        if (found.isEmpty() && probe(url, 500)) found.offer(url)
+                        if (found.isEmpty() && probe(url, 800)) found.offer(url)
                     }))
                 }
             }
@@ -254,21 +276,36 @@ object Net {
             val t = Prefs.token
             if (t.isNotEmpty()) {
                 val r = request("GET", "$base/api/session", t, null, 4000)
-                if (r.first == 200) return t
+                if (r.first == 200) {
+                    val j = try { JSONObject(r.second) } catch (e: Exception) { JSONObject() }
+                    Prefs.role = j.optString("role", "full")
+                    if (j.optBoolean("pending")) throw NetError(403, PENDING)
+                    return t
+                }
+                if (r.first == 401 && detail(r.second, "").startsWith("Ditolak")) {
+                    Prefs.token = ""
+                    throw NetError(401, detail(r.second, "Ditolak oleh PC."))
+                }
             }
         }
         val pin = Prefs.pin
         if (pin.isEmpty()) throw NetError(401, "Belum ada PIN. Isi PIN dari layar PC.")
-        val r = request("POST", "$base/api/login", null, JSONObject().put("pin", pin).put("name", deviceName()).toString(), 6000)
+        val body = JSONObject().put("pin", pin).put("name", deviceName()).put("device", Prefs.deviceId).toString()
+        val r = request("POST", "$base/api/login", null, body, 6000)
         if (r.first == 200) {
-            val t = JSONObject(r.second).optString("token", "")
+            val j = JSONObject(r.second)
+            val t = j.optString("token", "")
             if (t.isNotEmpty()) {
                 Prefs.token = t
+                Prefs.role = j.optString("role", "full")
+                if (j.optBoolean("pending")) throw NetError(403, PENDING)
                 return t
             }
         }
         throw NetError(r.first, detail(r.second, "Login gagal (${r.first})"))
     }
+
+    const val PENDING = "Menunggu izin dari PC. Tekan Izinkan di layar DropBridge laptop."
 
     fun getJson(base: String, token: String, path: String): JSONObject {
         val r = request("GET", base + path, token, null, 8000)

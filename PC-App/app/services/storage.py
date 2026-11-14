@@ -125,6 +125,40 @@ def _zip_iter(paths) -> Iterator[bytes]:
         yield data
 
 
+def trash_label() -> str:
+    """Nama tempat sampah untuk pesan ke pengguna."""
+    if _send2trash is None:
+        return "folder Terhapus"
+    return "Recycle Bin" if os.name == "nt" else "Tempat Sampah"
+
+
+try:
+    from send2trash import send2trash as _send2trash
+except Exception:  # paket belum terpasang
+    _send2trash = None
+
+
+def to_trash(path: Path) -> None:
+    """Hapus = pindah ke Recycle Bin / Tempat Sampah, supaya salah hapus dari HP masih bisa dikembalikan.
+
+    Bila gagal (paket tidak ada, drive jaringan), dipindah ke data/Terhapus/<tanggal>/ milik DropBridge.
+    """
+    if _send2trash is not None:
+        try:
+            _send2trash(str(path))
+            return
+        except Exception:
+            pass
+    dest = settings.data_dir / "Terhapus" / time.strftime("%Y-%m-%d")
+    dest.mkdir(parents=True, exist_ok=True)
+    target = dest / path.name
+    n = 1
+    while target.exists():
+        target = dest / f"{path.stem} ({n}){path.suffix}"
+        n += 1
+    shutil.move(str(path), str(target))
+
+
 def arrived(st) -> float:
     """Kapan file masuk ke PC. mtime bisa diset ke waktu foto diambil, jadi pakai juga waktu dibuat."""
     born = getattr(st, "st_birthtime", None) or st.st_ctime
@@ -265,10 +299,14 @@ class LocalStorage:
             size += z
             latest = max(latest, t)
         if path and depth <= MAX_DEPTH:
-            try:
-                mt = d.stat().st_mtime
-            except OSError:
-                mt = 0.0
+            # Waktu folder = file terbaru di dalamnya. Tanggal folder sendiri hanya untuk folder kosong
+            # (tanggal folder berubah saat dipindah/disalin, jadi menyesatkan).
+            mt = 0.0
+            if not latest:
+                try:
+                    mt = d.stat().st_mtime
+                except OSError:
+                    pass
             out.append({
                 "name": path,                      # jalur lengkap, mis. "TRHU-4134291/30-1"
                 "label": path.rsplit("/", 1)[-1],  # nama yang ditampilkan
@@ -369,12 +407,7 @@ class LocalStorage:
             raise StorageError(
                 "Isi folder berubah sejak konfirmasi. Cek lagi sebelum menghapus.", 409, count=len(visible)
             )
-        for e in files:
-            os.unlink(e.path)
-        try:
-            d.rmdir()
-        except OSError:
-            raise StorageError("Folder tidak kosong setelah dihapus. Hapus sisanya dari PC.", 409)
+        to_trash(d)
         return len(visible)
 
     def zip_stream(self, folder: str) -> Tuple[str, Iterator[bytes]]:
@@ -572,7 +605,7 @@ class LocalStorage:
             pass
 
     def delete(self, folder: str, name: str) -> None:
-        self.path_of(folder, name).unlink()
+        to_trash(self.path_of(folder, name))
 
     def move(self, folder: str, name: str, to_raw: str) -> Tuple[str, str]:
         src = self.path_of(folder, name)

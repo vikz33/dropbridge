@@ -72,6 +72,7 @@ class MainActivity : Activity() {
     private var capFolder = ""
     private var capCount = 0
     private var shownFolders = "-"
+    private var pendingAt = 0L
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -205,9 +206,13 @@ class MainActivity : Activity() {
             background = Ui.ripple(c, Ui.CARD, 12, Ui.LINE2)
             isClickable = true
             isFocusable = true
+            // Ganti: pilih PC tujuan (laptop Windows, laptop Linux, ...) atau hubungkan PC baru
             setOnClickListener {
-                if (Prefs.pin.isEmpty()) startActivity(Intent(c, MoreActivity::class.java))
-                else { Conn.connect(this@MainActivity, rescan = true); shownRoute = ""; refresh() }
+                PcPicker.open(this@MainActivity) {
+                    shownRoute = ""; shownSub = ""; shownFolders = "-"
+                    Conn.connect(this@MainActivity)
+                    refresh()
+                }
             }
         }
         rrow.addView(routeBtn, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { leftMargin = Ui.dp(c, 8) })
@@ -589,6 +594,7 @@ class MainActivity : Activity() {
         val (dot, sub) = when {
             mode == 1 -> Ui.INDIGO to "Teman tidak perlu aplikasi"
             ok -> Ui.OK to "$pcn terhubung"
+            line == Net.PENDING -> Ui.PENDING to "Menunggu izin dari $pcn"
             line.startsWith("Mencari") -> Ui.PENDING to "Mencari PC..."
             Prefs.pin.isEmpty() -> Ui.PENDING to "Belum tersambung ke PC"
             else -> Ui.PENDING to "$pcn tidak terjangkau"
@@ -612,6 +618,13 @@ class MainActivity : Activity() {
         }
         refreshRoute(ok, line, host)
         refreshChips()
+        // Menunggu izin dari laptop: cek lagi tiap 4 detik sampai diizinkan atau ditolak
+        val now0 = System.currentTimeMillis()
+        if (line == Net.PENDING && !Conn.busy && now0 - pendingAt > 4000) {
+            pendingAt = now0
+            Conn.connect(this)
+        }
+        recentCard.visibility = if (Prefs.role == "send") View.GONE else recentCard.visibility
 
         val groups = Queue.groups()
         val n = groups.sumOf { it.second.size }
@@ -648,7 +661,7 @@ class MainActivity : Activity() {
         }
         // Daftar "Terakhir masuk ke PC": muat ulang tiap 15 detik dan setelah kiriman selesai
         val now = System.currentTimeMillis()
-        if (mode == 0 && ok && ((wasSending && !sending) || now - recentAt > 15000)) {
+        if (mode == 0 && ok && Prefs.role != "send" && ((wasSending && !sending) || now - recentAt > 15000)) {
             recentAt = now
             loadRecent()
         }
@@ -692,6 +705,7 @@ class MainActivity : Activity() {
         val addr = Net.current.ifEmpty { Prefs.server }.removePrefix("http://").removeSuffix(":8000")
         val state = when {
             searching -> "search"
+            line == Net.PENDING -> "pending"
             ok && Net.viaRemote -> "net"
             ok -> "lan"
             Prefs.pin.isEmpty() -> "nopin"
@@ -699,16 +713,19 @@ class MainActivity : Activity() {
         }
         val appV = Ui.appVersion(c)
         val pcV = Prefs.pcVersion
-        val key = "$state|$addr|$line|$pcV"
+        val pc = Prefs.pcName.ifEmpty { if (addr.isEmpty()) "PC" else addr }
+        val os = if (Prefs.pcOs.isNotEmpty()) " · ${Prefs.pcOs}" else ""
+        val key = "$state|$addr|$line|$pcV|$pc|$os|${Prefs.role}"
         if (key == shownRoute) return
         shownRoute = key
         data class R(val icon: Int, val fg: Int, val bg: Int, val title: String, val sub: String, val btn: String)
         val r = when (state) {
-            "search" -> R(Icon.WIFI, Ui.MUTED, Ui.FIELD, "Mencari PC...", "Cek Wi-Fi dulu, lalu jalur internet (Tailscale)", "Mencari…")
-            "lan" -> R(Icon.WIFI, Ui.ACCENT, Ui.SOFT2, "Lewat Wi-Fi / hotspot yang sama", "Tidak butuh internet · $addr", "Cari PC")
-            "net" -> R(Icon.GLOBE, Ui.INDIGO, Ui.INDIGO_SOFT, "Lewat internet (Tailscale)", "Butuh internet, pakai kuota data · $addr", "Cari PC")
-            "nopin" -> R(Icon.PC, Ui.MUTED, Ui.FIELD, "Belum tersambung ke PC", "Masukkan PIN dari layar PC", "Sambungkan")
-            else -> R(Icon.WARN, Ui.WARN_TX, Ui.WARN_BADGE, "PC tidak ditemukan", line.removePrefix("PC tidak ditemukan. "), "Cari PC")
+            "search" -> R(Icon.WIFI, Ui.MUTED, Ui.FIELD, "Mencari $pc...", "Cek Wi-Fi dulu, lalu jalur internet (Tailscale)", "Ganti")
+            "pending" -> R(Icon.CLOCK, Ui.WARN_TX, Ui.WARN_BADGE, "Menunggu izin dari $pc", "Tekan Izinkan di layar DropBridge laptop", "Ganti")
+            "lan" -> R(Icon.PC, Ui.ACCENT, Ui.SOFT2, "$pc$os", "Wi-Fi yang sama, tanpa internet · $addr" + if (Prefs.role == "send") " · hanya kirim" else "", "Ganti")
+            "net" -> R(Icon.GLOBE, Ui.INDIGO, Ui.INDIGO_SOFT, "$pc$os", "Lewat internet (Tailscale), pakai kuota · $addr", "Ganti")
+            "nopin" -> R(Icon.PC, Ui.MUTED, Ui.FIELD, "Belum tersambung ke PC", "Ketuk Pilih, lalu masukkan PIN dari layar PC", "Pilih")
+            else -> R(Icon.WARN, Ui.WARN_TX, Ui.WARN_BADGE, "$pc tidak ditemukan", line.removePrefix("PC tidak ditemukan. ").removePrefix("$pc tidak terjangkau. "), "Ganti")
         }
         routeIcon.removeAllViews()
         routeIcon.background = Ui.rounded(c, r.bg, 12)
@@ -716,9 +733,8 @@ class MainActivity : Activity() {
         routeTitle.text = r.title
         routeSub.text = r.sub
         routeBtn.text = r.btn
-        routeBtn.isEnabled = state != "search"
-        routeBtn.alpha = if (state == "search") 0.5f else 1f
-        routeCard.background = if (state == "fail") Ui.rounded(c, Ui.WARN_BG, 20, Ui.WARN_LINE) else Ui.rounded(c, Ui.CARD, 20, Ui.LINE)
+        routeBtn.contentDescription = if (r.btn == "Ganti") "Ganti PC tujuan" else "Pilih PC tujuan"
+        routeCard.background = if (state == "fail" || state == "pending") Ui.rounded(c, Ui.WARN_BG, 20, Ui.WARN_LINE) else Ui.rounded(c, Ui.CARD, 20, Ui.LINE)
         routeCard.contentDescription = "${r.title}. ${r.sub}"
         // Versi aplikasi dan PC beda: salah satu kemungkinan belum diperbarui
         if (Ui.versionMismatch(appV, pcV)) {

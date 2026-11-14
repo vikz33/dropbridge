@@ -103,8 +103,14 @@ class MoreActivity : Activity() {
         conn.addView(Ui.button(c, "Sambungkan / cari PC", Ui.Kind.PRIMARY, 48) {
             val pin = pinEdit.text.toString().trim()
             val addr = addrEdit.text.toString().trim()
-            if (pin.isNotEmpty()) Prefs.pin = pin
-            if (addr.isNotEmpty()) Prefs.server = Conn.normalize(addr)
+            val newAddr = if (addr.isNotEmpty()) Conn.normalize(addr) else ""
+            if (newAddr.isNotEmpty() && newAddr != Prefs.server) {
+                // Alamat lain = bisa jadi PC lain: simpan PC lama di daftar, mulai PC baru
+                Pcs.saveActive()
+                Prefs.pcId = ""; Prefs.pcOs = ""; Prefs.pcName = ""; Prefs.token = ""; Prefs.remoteServer = ""
+                Prefs.server = newAddr
+            }
+            if (pin.isNotEmpty() && pin != Prefs.pin) { Prefs.pin = pin; Prefs.token = "" }
             Conn.connect(this, rescan = addr.isEmpty()) { addrEdit.setText(it) }
         }, Ui.lp(c, t = 14))
         col.addView(conn, Ui.lp(c, t = 12))

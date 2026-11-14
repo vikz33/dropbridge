@@ -71,6 +71,33 @@ object Prefs {
         get() = sp?.getBoolean("autoSend", true) ?: true
         set(v) { sp?.edit()?.putBoolean("autoSend", v)?.apply() }
 
+    /** PC yang sedang dipakai: kode tetap dan sistemnya (Windows/Linux), dari /api/info. */
+    var pcId: String
+        get() = get("pcId")
+        set(v) = put("pcId", v)
+
+    var pcOs: String
+        get() = get("pcOs")
+        set(v) = put("pcOs", v)
+
+    /** Hak HP ini di PC yang dipakai: "full" atau "send" (hanya kirim). */
+    var role: String
+        get() = get("role").ifEmpty { "full" }
+        set(v) = put("role", v)
+
+    /** Kode tetap HP ini; PC mengingat izinnya, jadi login ulang tidak perlu izin lagi. */
+    val deviceId: String
+        get() {
+            var v = get("deviceId")
+            if (v.isEmpty()) { v = "a" + java.util.UUID.randomUUID().toString().replace("-", ""); put("deviceId", v) }
+            return v
+        }
+
+    /** Semua PC yang pernah disambungkan (JSON), untuk pindah PC tanpa PIN lagi. */
+    var pcList: String
+        get() = get("pcList")
+        set(v) = put("pcList", v)
+
     /** Daftar folder di PC (disimpan terakhir kali berhasil diambil) untuk saran nama. */
     var folders: List<String>
         get() = get("folders").split("\n").filter { it.isNotEmpty() }

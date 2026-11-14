@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, discovery
-from .config import settings
+from .config import os_label, settings
 from .version import VERSION
 from .netinfo import is_tailscale, lan_urls, remote_urls, tailscale_name
 from .routes import clipboard, files, folders
@@ -76,6 +76,8 @@ def info(request: Request):
         "this_pc": _from_this_pc(request),
         "name": "DropBridge",
         "pc_name": socket.gethostname(),
+        "pc_id": settings.pc_id,
+        "os": os_label(),
         "version": VERSION,
         "storage_dir": str(settings.shared_dir) if _from_this_pc(request) else "",
         "android": system.android_info(),

@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ..auth import require_auth
+from ..auth import require_auth, require_full
 from ..config import settings
 
 router = APIRouter(prefix="/api/clips", dependencies=[Depends(require_auth)])
@@ -68,7 +68,7 @@ class ClipIn(BaseModel):
     source: str = Field("lain", max_length=10)
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_full)])
 def list_clips():
     return {"clips": store.all()}
 
@@ -81,14 +81,14 @@ def add_clip(body: ClipIn):
     return store.add(text, body.source)
 
 
-@router.delete("/{clip_id}")
+@router.delete("/{clip_id}", dependencies=[Depends(require_full)])
 def remove_clip(clip_id: str):
     if not store.remove(clip_id):
         raise HTTPException(status_code=404, detail="Tidak ditemukan.")
     return {"ok": True}
 
 
-@router.delete("")
+@router.delete("", dependencies=[Depends(require_full)])
 def clear_clips():
     store.clear()
     return {"ok": True}

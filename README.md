@@ -8,9 +8,11 @@ tanpa memasang aplikasi di HP. Cukup browser.
 ```
 DropBridge/
   Web/           tampilan (index.html, app.js, style.css), dipakai PC, browser HP, dan jendela desktop
-  PC-App/        server + jendela desktop + bahan installer (start.bat, build_exe.bat)
+  PC-App/        server + jendela desktop + bahan installer
+                 Windows: start.bat, build_exe.bat · Linux: start.sh, build_deb.sh
   Android-App/   aplikasi Android (build_apk.bat)
-  Rilis/         hasil jadi untuk dibagikan: DropBridge-Setup-<versi>.exe dan DropBridge-<versi>.apk
+  Rilis/         hasil jadi untuk dibagikan: DropBridge-Setup-<versi>.exe, dropbridge_<versi>_amd64.deb,
+                 DropBridge-<versi>.apk
                  (tidak masuk Git)
   build_semua.bat  build APK lalu installer PC sekaligus, hasil ke Rilis
 ```
@@ -24,8 +26,8 @@ Folder ini hanya berisi kode. Data pribadi disimpan di luar:
 | Apa | Di mana |
 |---|---|
 | File kiriman HP | `Documents\DropBridge` (bisa diganti, mis. ke OneDrive kantor, lewat **Ganti** di halaman Kirim) |
-| Pengaturan (PIN, folder) | `%LOCALAPPDATA%\DropBridge\config.json` |
-| Perangkat terhubung, riwayat teks, log | `%LOCALAPPDATA%\DropBridge\data` |
+| Pengaturan (PIN, folder) | Windows `%LOCALAPPDATA%\DropBridge\config.json` · Linux `~/.local/share/DropBridge/config.json` |
+| Perangkat terhubung, izin, riwayat teks, log | folder `data` di sebelah config.json |
 
 Versi dari kode (`start.bat`) dan versi terpasang (`.exe`) memakai pengaturan yang sama, jadi PIN dan HP
 yang sudah terhubung tidak berbeda.
@@ -119,7 +121,54 @@ Aplikasi Android pendamping (kirim otomatis, mode host, mencari PC otomatis, dan
 HP mengunduh APK langsung dari laptop: menu **Hubungkan** > kartu **Aplikasi Android** (QR). APK yang ditawarkan adalah
 yang terbaru di `Rilis\` atau yang ikut di installer. Server membalas pencarian dari aplikasi lewat UDP port 47800 (`app/discovery.py`).
 
-## Pengaturan (`%LOCALAPPDATA%\DropBridge\config.json`)
+## Linux (Mint, Ubuntu, Debian)
+
+Tampilan dan fitur sama dengan Windows: jendela sendiri (WebKitGTK), ikon di panel bawah, notifikasi file masuk,
+mulai otomatis saat laptop menyala. Diuji untuk Linux Mint 22 (Xfce/Cinnamon).
+
+**Pasang (sehari-hari):** salin `Rilis/dropbridge_<versi>_amd64.deb` ke laptop Linux, klik ganda, Install.
+Atau di terminal: `sudo apt install ./dropbridge_<versi>_amd64.deb`. Buka **DropBridge** dari menu.
+
+**Membangun .deb** (harus di laptop Linux itu sendiri, .deb tidak bisa dibuat di Windows):
+
+```
+sudo apt install git python3-venv dpkg-dev        # sekali saja
+git clone https://github.com/vikz33/dropbridge.git ~/Dev/DropBridge   # sekali saja; selanjutnya: git pull
+cd ~/Dev/DropBridge/PC-App
+bash build_deb.sh                                  # hasil: ../Rilis/dropbridge_<versi>_amd64.deb
+```
+
+APK Android tidak ikut di Git. Supaya HP bisa mengunduh APK dari laptop Linux, salin `DropBridge-<versi>.apk`
+ke folder `Rilis/` sebelum `build_deb.sh` (misalnya kirim dari laptop Windows lewat DropBridge).
+
+**Dari kode** (mencoba pembaruan sebelum membangun .deb): `bash PC-App/start.sh`. Pertama kali dia menawarkan
+memasang paket sistem yang kurang (`python3-gi`, `gir1.2-webkit2-4.1`, `gir1.2-ayatanaappindicator3-0.1`,
+`libnotify-bin`, `zenity`). `bash start.sh konsol` = server saja di terminal.
+
+Firewall: di Mint `ufw` bawaannya mati. Bila menyala, paket .deb membuka port 8000/tcp dan 47800/udp sendiri.
+
+## Dua laptop atau lebih
+
+Tiap laptop menjalankan DropBridge sendiri dengan PIN sendiri. Aplikasi Android menyimpan semua PC yang pernah
+disambungkan: kartu PC di halaman Kirim menampilkan tujuan (mis. "laptop-mint · Linux") dan tombol **Ganti**.
+HP selalu mengirim ke PC yang terakhir dipilih; kalau PC itu mati, file menunggu di antrean (tidak dikirim ke PC
+lain diam-diam), dan kartunya menyarankan PC lain yang ada di Wi-Fi yang sama.
+
+### Folder kedua laptop selalu sama (opsional, Syncthing)
+
+DropBridge tidak menyinkron antarlaptop. Untuk itu pakai **Syncthing** (gratis, Windows dan Linux,
+https://syncthing.net):
+
+1. Pasang Syncthing di kedua laptop (Linux: `sudo apt install syncthing`, lalu buka http://127.0.0.1:8384).
+2. Di laptop A: Add Remote Device, masukkan Device ID laptop B. Terima di laptop B.
+3. Bagikan folder penyimpanan DropBridge (mis. `Documents\DropBridge` di Windows) ke laptop B, dan di laptop B
+   arahkan ke folder penyimpanan DropBridge-nya (mis. `~/Documents/DropBridge`).
+4. Nyalakan **File Versioning** (mis. Trash Can, 14 hari) di folder itu, supaya file yang terhapus masih bisa kembali.
+
+Catatan: jangan pakai Syncthing di folder yang juga disinkron OneDrive. Syncthing hanya menerima perangkat yang
+kamu setujui (Device ID), jadi orang yang tahu PIN DropBridge tidak bisa ikut sinkron.
+
+## Pengaturan (config.json)
 
 | Kunci | Fungsi |
 |---|---|
@@ -132,6 +181,7 @@ yang terbaru di `Rilis\` atau yang ikut di installer. Server membalas pencarian 
 | `idle_hours` | Perangkat lain otomatis keluar bila tidak aktif sekian jam (default 8, 0 = nonaktif) |
 | `lan_only` | `true` = tolak koneksi dari luar jaringan lokal |
 | `enable_docs` | `true` = buka dokumentasi API di `/docs` |
+| `approve_new` | `true` = HP baru harus diizinkan dari laptop walau PIN-nya benar (bawaan). Bisa diubah di Pengaturan |
 
 Ubah lalu jalankan ulang DropBridge (tray > Berhenti, lalu buka lagi).
 
@@ -146,6 +196,8 @@ PC-App/
   tray.py              nama lama, meneruskan ke desktop.py
   run.py               server saja (dipakai "start.bat konsol"), menampilkan alamat dan PIN
   build_exe.bat        membangun Rilis\DropBridge-Setup-<versi>.exe
+  start.sh             Linux: jalankan dari kode ("start.sh konsol" = terminal)
+  build_deb.sh         Linux: membangun Rilis/dropbridge_<versi>_amd64.deb
   DropBridge.spec      resep PyInstaller (dipakai build_exe.bat)
   installer/           resep installer Inno Setup
   tools/make_icon.py   membuat ikon .ico dari logo
@@ -208,6 +260,12 @@ Kirim otomatis di latar belakang memakai data seluler hanya jika "Boleh pakai da
 
 ## Keamanan
 
+- **Izin HP baru** (2.5.0): PIN benar saja belum cukup. Laptop memunculkan "HP baru ingin terhubung" dengan pilihan
+  hak **Hanya kirim** (bisa mengirim, tidak bisa melihat/mengunduh/menghapus) atau **Penuh**, lalu Izinkan/Tolak.
+  Tidak dijawab 2 menit = ditolak. HP yang sudah diizinkan diingat, jadi login ulang tidak perlu izin lagi.
+- Di Hubungkan (dari laptop): ketuk hak sebuah HP untuk mengubahnya, **Putuskan** untuk mengeluarkannya (harus
+  diizinkan lagi untuk masuk), dan **Ganti PIN**. HP yang sudah terhubung tetap terhubung setelah PIN diganti.
+- **Hapus = Recycle Bin / Tempat Sampah**: file atau folder yang dihapus dari HP masih bisa dikembalikan dari PC.
 - Jaringan lokal saja. **Jangan** membuka port ini ke internet (port forwarding) tanpa HTTPS dan pengamanan tambahan.
 - Koneksi memakai HTTP biasa, jadi PIN terkirim tanpa enkripsi di dalam Wi-Fi. Pakai Wi-Fi rumah atau kantor
   yang dipercaya, jangan Wi-Fi publik.

@@ -11,22 +11,22 @@ from starlette.requests import ClientDisconnect
 from pydantic import BaseModel, Field
 
 from .. import events
-from ..auth import require_auth
+from ..auth import require_auth, require_full
 from ..config import settings
 from ..services import thumbs
-from ..services.storage import guess_mime, is_inline_safe, storage
+from ..services.storage import guess_mime, is_inline_safe, storage, trash_label
 
 router = APIRouter(prefix="/api/files", dependencies=[Depends(require_auth)])
 
 CHUNK = 1024 * 1024
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_full)])
 def list_files(folder: str = ""):
     return {"folder": folder, "files": storage.list_files(folder)}
 
 
-@router.get("/recent")
+@router.get("/recent", dependencies=[Depends(require_full)])
 def recent_files(limit: int = 8):
     """File yang paling baru masuk, dari semua folder."""
     return {"files": storage.recent_files(max(1, min(limit, 50)))}
@@ -190,13 +190,13 @@ class MoveIn(BaseModel):
     to: str = Field(min_length=1, max_length=200)
 
 
-@router.post("/move")
+@router.post("/move", dependencies=[Depends(require_full)])
 def move(body: MoveIn):
     to, final = storage.move(body.folder, body.name, body.to)
     return {"folder": to, "name": final}
 
 
-@router.get("/{name}/thumb")
+@router.get("/{name}/thumb", dependencies=[Depends(require_full)])
 def thumb(name: str, folder: str = ""):
     path = storage.path_of(folder, name)
     if not thumbs.thumbable(guess_mime(path.name)):
@@ -207,7 +207,7 @@ def thumb(name: str, folder: str = ""):
     return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
-@router.get("/{name}")
+@router.get("/{name}", dependencies=[Depends(require_full)])
 def download(name: str, folder: str = "", inline: bool = False):
     path = storage.path_of(folder, name)
     mime = guess_mime(path.name)
@@ -215,7 +215,7 @@ def download(name: str, folder: str = "", inline: bool = False):
     return FileResponse(path, media_type=mime, filename=path.name, content_disposition_type=disposition)
 
 
-@router.delete("/{name}")
+@router.delete("/{name}", dependencies=[Depends(require_full)])
 def delete(name: str, folder: str = ""):
     storage.delete(folder, name)
-    return {"ok": True}
+    return {"ok": True, "trash": trash_label()}

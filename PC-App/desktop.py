@@ -1,17 +1,19 @@
 """DropBridge versi desktop: begitu dibuka, laptop ini langsung jadi server.
 
-- Jendela sendiri (WebView2 bawaan Windows), isinya halaman yang sama dengan web dan aplikasi.
+- Jendela sendiri (WebView2 di Windows, WebKitGTK di Linux), isinya halaman yang sama dengan web dan aplikasi.
 - Tombol X menyembunyikan jendela ke tray; server tetap jalan supaya HP masih bisa mengirim.
 - Dibuka lagi saat sudah jalan: jendela yang ada dimunculkan (tidak ada salinan kedua).
-- `--tray`: mulai tanpa jendela (dipakai saat Windows menyala).
-- Notifikasi Windows saat file masuk.
+- `--tray`: mulai tanpa jendela (dipakai saat laptop menyala).
+- Notifikasi saat file masuk dan saat HP baru minta izin.
 
-Dijalankan oleh DropBridge.exe (hasil build_exe.bat) atau `pythonw desktop.py` (start.bat).
+Dijalankan oleh DropBridge.exe / paket .deb, atau `pythonw desktop.py` (start.bat) / `start.sh` di Linux.
 Catatan ada di data/server.log.
 """
 import json
 import os
+import shutil
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -39,7 +41,7 @@ except Exception:
 
 
 def message(text: str, title: str = "DropBridge") -> None:
-    """Kotak pesan Windows (tetap terlihat walau tanpa konsol)."""
+    """Kotak pesan (Windows: MessageBox, Linux: zenity), tetap terlihat walau tanpa konsol."""
     print(text, flush=True)
     if os.name == "nt":
         try:
@@ -47,12 +49,22 @@ def message(text: str, title: str = "DropBridge") -> None:
             ctypes.windll.user32.MessageBoxW(None, text, title, 0x40 | 0x40000)
         except Exception:
             pass
+    elif shutil.which("zenity"):
+        subprocess.run(["zenity", "--info", "--no-wrap", f"--title={title}", f"--text={text}"], check=False)
 
 
 def ask(text: str, title: str = "DropBridge", buttons: int = 0x4) -> int:
     """Ya/Tidak (0x4) atau Ya/Tidak/Batal (0x3). Hasil: 6 Ya, 7 Tidak, 2 Batal."""
     if os.name != "nt":
-        return 2
+        if not shutil.which("zenity"):
+            return 2
+        cmd = ["zenity", "--question", "--no-wrap", f"--title={title}", f"--text={text}", "--ok-label=Ya", "--cancel-label=Tidak"]
+        if buttons == 0x3:
+            cmd.append("--extra-button=Batal")
+        r = subprocess.run(cmd, capture_output=True, check=False)
+        if r.stdout.decode("utf-8", "replace").strip() == "Batal":
+            return 2
+        return 6 if r.returncode == 0 else (2 if buttons == 0x3 and r.returncode not in (0, 1) else 7)
     import ctypes
     return ctypes.windll.user32.MessageBoxW(None, text, title, buttons | 0x20 | 0x40000)
 
@@ -124,9 +136,24 @@ def _autostart_cmd() -> str:
     return f'"{pyw if pyw.exists() else sys.executable}" "{Path(__file__).resolve()}" --tray'
 
 
+# Linux: berkas .desktop di ~/.config/autostart (cara standar Mint/Xfce/GNOME)
+LINUX_AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart" / "dropbridge.desktop"
+
+
+INSTALLED_LINUX = os.name != "nt" and str(Path(__file__).resolve()).startswith("/opt/dropbridge/")
+
+
+def _linux_cmd() -> str:
+    if FROZEN:
+        return f'"{sys.executable}" --tray'
+    if INSTALLED_LINUX:
+        return "dropbridge --tray"  # dari paket .deb
+    return f'"{sys.executable}" "{Path(__file__).resolve()}" --tray'
+
+
 def autostart_on() -> bool:
     if os.name != "nt":
-        return False
+        return LINUX_AUTOSTART.exists()
     import winreg
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
@@ -137,6 +164,16 @@ def autostart_on() -> bool:
 
 
 def set_autostart(on: bool) -> None:
+    if os.name != "nt":
+        if on:
+            LINUX_AUTOSTART.parent.mkdir(parents=True, exist_ok=True)
+            LINUX_AUTOSTART.write_text(
+                "[Desktop Entry]\nType=Application\nName=DropBridge\nComment=Terima file dari HP\n"
+                f"Exec={_linux_cmd()}\nIcon=dropbridge\nX-GNOME-Autostart-enabled=true\nTerminal=false\n",
+                encoding="utf-8")
+        else:
+            LINUX_AUTOSTART.unlink(missing_ok=True)
+        return
     import winreg
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
         if on:
@@ -151,6 +188,21 @@ def set_autostart(on: bool) -> None:
 def migrate_old_autostart() -> None:
     """Versi lama memakai DropBridge.vbs di folder Startup: ganti ke registry (yang dipakai installer juga)."""
     if os.name != "nt":
+        # Linux: perbarui jalur di berkas autostart; versi dari kode tidak menimpa milik paket .deb
+        if autostart_on():
+            cur = LINUX_AUTOSTART.read_text(encoding="utf-8", errors="replace")
+            if FROZEN or INSTALLED_LINUX or "dropbridge --tray" not in cur:
+                set_autostart(True)
+        elif INSTALLED_LINUX:
+            # Paket .deb, pertama kali dibuka: nyalakan "mulai otomatis" seperti pilihan bawaan installer Windows
+            from app.config import CONFIG_PATH
+            try:
+                raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                raw = {}
+            if not raw.get("linux_autostart_set"):
+                set_autostart(True)
+                save_setting("linux_autostart_set", True)
         return
     vbs = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "DropBridge.vbs"
     if vbs.exists():
@@ -221,11 +273,28 @@ class Desktop:
 
     # ----- notifikasi -----
     def notify(self, text: str, title: str = "DropBridge") -> None:
+        if os.name != "nt" and shutil.which("notify-send"):
+            # Linux: notifikasi bawaan desktop (libnotify); ikon tray AppIndicator tidak bisa memunculkan notifikasi
+            try:
+                icon = USER_DIR / "data" / "dropbridge.png"
+                if not icon.exists():
+                    icon.parent.mkdir(parents=True, exist_ok=True)
+                    icon_image(128).save(icon)
+                subprocess.Popen(["notify-send", "-a", "DropBridge", "-i", str(icon), title, text])
+                return
+            except Exception:
+                pass
         try:
             if self.icon is not None:
                 self.icon.notify(text, title)
         except Exception:
             pass
+
+    def on_approve(self, dev: dict) -> None:
+        """HP baru memasukkan PIN yang benar: minta izin di jendela (halaman Hubungkan)."""
+        name = dev.get("name") or dev.get("kind") or "HP baru"
+        self.notify(f"{name} ({dev.get('ip', '')}) ingin terhubung.\nBuka DropBridge untuk Izinkan atau Tolak.", "HP baru ingin terhubung")
+        self.show("#/hubungkan")
 
     def on_file(self, folder: str, name: str) -> None:
         if not settings.notify:
@@ -320,7 +389,7 @@ class Desktop:
 
         def open_folder(icon, item):
             try:
-                os.startfile(str(settings.shared_dir))  # type: ignore[attr-defined]
+                storage_admin.open_path(settings.shared_dir)
             except Exception:
                 webbrowser.open(settings.shared_dir.as_uri())
 
@@ -364,8 +433,8 @@ class Desktop:
             pystray.MenuItem(f"PIN: {settings.pin}", None, enabled=False),
             pystray.MenuItem(ver, None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Mulai otomatis saat Windows menyala", toggle_autostart,
-                             checked=lambda item: autostart_on(), visible=os.name == "nt"),
+            pystray.MenuItem("Mulai otomatis saat " + ("Windows" if os.name == "nt" else "laptop") + " menyala",
+                             toggle_autostart, checked=lambda item: autostart_on()),
             pystray.MenuItem("Notifikasi saat file masuk", toggle_notify, checked=lambda item: settings.notify),
             pystray.MenuItem("Berhenti", quit_all),
         )
@@ -398,6 +467,7 @@ class Desktop:
             return
         events.on("file", self.on_file)
         events.on("show", lambda route: self.show(route or None))
+        events.on("approve", self.on_approve)
         migrate_old_autostart()
 
         try:
@@ -436,7 +506,7 @@ class Desktop:
             webview.start(private_mode=False, storage_path=storage)
         except Exception:
             traceback.print_exc()
-            message("Jendela DropBridge tidak bisa dibuka (WebView2 tidak tersedia?).\n"
+            message("Jendela DropBridge tidak bisa dibuka (WebView2/WebKitGTK tidak tersedia?).\n"
                     "DropBridge tetap jalan dan dibuka di browser.")
             self.window = None
             webbrowser.open(f"http://localhost:{settings.port}/")

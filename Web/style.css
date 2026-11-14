@@ -472,3 +472,35 @@ label.mrow { cursor: pointer; }
   .sheet .dlg-body::before { content: ""; justify-self: center; width: 40px; height: 4px; border-radius: 4px; background: var(--line); }
   .ftools .tbar { flex: 1 1 100%; justify-content: space-between; }
 }
+
+/* ---------- 2.5.0: ikon muat ulang, izin HP baru, hak perangkat ---------- */
+.top-acts { display: flex; gap: 8px; align-items: center; }
+.iconbtn.refresh.spin svg { animation: dbspin .8s linear infinite; }
+@keyframes dbspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .iconbtn.refresh.spin svg { animation: none; opacity: .5; } }
+.wait-card { text-align: center; justify-items: center; }
+.ap-ic { width: 52px; height: 52px; border-radius: 14px; background: var(--soft); display: block;
+  -webkit-mask: none; position: relative; }
+.ap-ic::after { content: ""; position: absolute; inset: 13px 16px; border: 2.4px solid var(--accent); border-radius: 5px; }
+.wait-h { font-size: 1.4rem; }
+.wait-card h1::before { animation: dbpulse 1.6s ease-in-out infinite; margin-left: auto; margin-right: auto; }
+@keyframes dbpulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .wait-card h1::before { animation: none; } }
+.ap-head { display: flex; gap: 14px; align-items: center; }
+.ap-head h3 { margin: 0 0 2px; }
+.ap-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 14px; }
+.ap-roles button { appearance: none; text-align: left; border: 2px solid transparent; background: transparent; color: var(--text);
+  border-radius: 10px; padding: 10px; font: inherit; cursor: pointer; display: grid; gap: 2px; }
+.ap-roles button small { color: var(--muted); font-size: .8rem; }
+.ap-roles button[aria-checked="true"] { border-color: var(--accent); background: var(--card); }
+.ap-roles button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ap-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.ap-left { text-align: center; margin: 0; }
+.dev-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.role-chip { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 999px; font-size: .8rem; font-weight: 700;
+  background: var(--soft); color: var(--deep); border: 0; font-family: inherit; cursor: default; }
+.role-chip.send { background: var(--line2); color: var(--muted); }
+button.role-chip { cursor: pointer; }
+.dev-row.pending { background: var(--soft); border-radius: 14px; padding: 8px 10px; }
+.dev-row .dev-btns { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+body.role-send [data-nav="folders"], body.role-send #recentCard { display: none !important; }

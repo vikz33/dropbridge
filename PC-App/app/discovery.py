@@ -23,7 +23,10 @@ def _serve(http_port: int) -> None:
         sock.bind(("", DISCOVERY_PORT))
     except OSError:
         return  # port dipakai (mis. jalan dua kali); pencarian otomatis dinonaktifkan, fitur lain tetap jalan
-    reply = json.dumps({"name": "DropBridge", "port": http_port, "host": socket.gethostname()}).encode()
+    from .config import os_label, settings
+    from .version import VERSION
+    reply = json.dumps({"name": "DropBridge", "port": http_port, "host": socket.gethostname(),
+                        "id": settings.pc_id, "os": os_label(), "version": VERSION}).encode()
     while True:
         try:
             data, addr = sock.recvfrom(256)

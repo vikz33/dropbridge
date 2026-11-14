@@ -21,10 +21,27 @@ def onedrive_work() -> Optional[Path]:
     return None
 
 
+def _pick_linux(start: Path) -> Optional[Path]:
+    """Linux: dialog pilih folder bawaan desktop (zenity di Mint; kdialog di KDE)."""
+    import shutil as _sh
+    for cmd in (["zenity", "--file-selection", "--directory", "--title=Pilih folder tempat DropBridge menyimpan kiriman",
+                 f"--filename={start}/"],
+                ["kdialog", "--getexistingdirectory", str(start), "--title", "Pilih folder penyimpanan DropBridge"]):
+        if not _sh.which(cmd[0]):
+            continue
+        try:
+            out = subprocess.run(cmd, capture_output=True, timeout=600)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        path = out.stdout.decode("utf-8", "replace").strip()
+        return Path(path) if out.returncode == 0 and path else None
+    return None
+
+
 def pick_folder(start: Path) -> Optional[Path]:
-    """Dialog pilih folder Windows (lewat PowerShell, jadi bisa dipanggil dari server maupun tray)."""
+    """Dialog pilih folder (Windows lewat PowerShell, Linux lewat zenity), bisa dipanggil dari server maupun tray."""
     if os.name != "nt":
-        return None
+        return _pick_linux(start)
     ps = (
         "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
         "Add-Type -AssemblyName System.Windows.Forms;"
@@ -64,6 +81,25 @@ def _same_file(a: Path, b: Path) -> bool:
     return h(a) == h(b)
 
 
+def _set_created(path: Path, t: float) -> None:
+    """Windows: kembalikan 'waktu dibuat' file (dipakai DropBridge sebagai waktu file masuk)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k32 = ctypes.windll.kernel32
+        h = k32.CreateFileW(str(path), 0x100, 0x7, None, 3, 0x80, None)  # FILE_WRITE_ATTRIBUTES
+        if h in (-1, 0xFFFFFFFF, None):
+            return
+        try:
+            v = int((t + 11644473600) * 10_000_000)
+            ft = wintypes.FILETIME(v & 0xFFFFFFFF, v >> 32)
+            k32.SetFileTime(h, ctypes.byref(ft), None, None)
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        pass
+
+
 def merge_move(src: Path, dst: Path) -> tuple[int, int, int]:
     """Pindahkan isi src ke dst, folder digabung. File yang sudah ada di dst tidak ditimpa.
     Hasil: (dipindah, kembar dilewati, bentrok dibiarkan di src)."""
@@ -83,7 +119,10 @@ def merge_move(src: Path, dst: Path) -> tuple[int, int, int]:
                         clash += 1
                     continue
                 b.parent.mkdir(parents=True, exist_ok=True)
+                born = a.stat().st_ctime if os.name == "nt" else None
                 shutil.move(str(a), str(b))
+                if born:
+                    _set_created(b, born)  # pindah antar-drive = salin: waktu masuk file jangan ikut berubah
                 moved += 1
             except OSError:
                 clash += 1
@@ -129,8 +168,16 @@ def switch(target: Path, move: bool) -> dict:
 
 
 def open_in_explorer(folder: str) -> None:
-    """Buka folder (jalur DropBridge, mis. 'A/B') di File Explorer."""
-    if os.name != "nt":
-        raise StorageError("Hanya bisa di Windows.")
+    """Buka folder (jalur DropBridge, mis. 'A/B') di File Explorer / pengelola file Linux."""
     d = storage._folder_dir(folder)
-    os.startfile(str(d))  # type: ignore[attr-defined]
+    open_path(d)
+
+
+def open_path(d: Path) -> None:
+    if os.name == "nt":
+        os.startfile(str(d))  # type: ignore[attr-defined]
+        return
+    try:
+        subprocess.Popen(["xdg-open", str(d)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        raise StorageError("Pengelola file tidak bisa dibuka.")

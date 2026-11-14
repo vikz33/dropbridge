@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..auth import require_auth
-from ..services.storage import StorageError, storage
+from ..auth import require_auth, require_full
+from ..services.storage import StorageError, storage, trash_label
 
 router = APIRouter(prefix="/api/folders", dependencies=[Depends(require_auth)])
 
@@ -33,21 +33,21 @@ def create_folder(body: FolderIn):
     return {"name": name, "created": created, "changed": name != body.name.strip()}
 
 
-@router.patch("/{name:path}")
+@router.patch("/{name:path}", dependencies=[Depends(require_full)])
 def rename_folder(name: str, body: FolderIn):
     return {"name": storage.rename_folder(name, body.name)}
 
 
-@router.delete("/{name:path}")
+@router.delete("/{name:path}", dependencies=[Depends(require_full)])
 def delete_folder(name: str, expect: Optional[int] = None):
     # `expect` wajib: jumlah file yang ditampilkan ke pengguna saat konfirmasi.
     if expect is None:
         raise StorageError("Parameter expect (jumlah file) wajib diisi.", 422)
     deleted = storage.delete_folder(name, expect)
-    return {"ok": True, "deleted": deleted}
+    return {"ok": True, "deleted": deleted, "trash": trash_label()}
 
 
-@router.get("/{name:path}/zip")
+@router.get("/{name:path}/zip", dependencies=[Depends(require_full)])
 def zip_folder(name: str):
     filename, chunks = storage.zip_stream(name)
     return StreamingResponse(

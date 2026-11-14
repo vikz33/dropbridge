@@ -20,7 +20,7 @@ object Conn {
     fun connect(a: Activity, rescan: Boolean = false, onAddr: (String) -> Unit = {}) {
         if (busy) return
         busy = true
-        Status.line = "Mencari PC..."
+        if (Status.line != Net.PENDING) Status.line = "Mencari PC..."
         Thread {
             try { work(a, rescan, onAddr) } finally { busy = false }
         }.start()
@@ -30,29 +30,41 @@ object Conn {
         run {
             val base = if (rescan) Net.rescan() else Net.ensureServer()
             if (base == null) {
-                Status.line = if (Prefs.remoteServer.isNotEmpty())
-                    "PC tidak ditemukan. Di luar jaringan? Nyalakan Tailscale di HP. Atau pastikan start.bat berjalan di PC."
-                else
-                    "PC tidak ditemukan. Pastikan start.bat berjalan dan HP satu Wi-Fi (atau hotspot) dengan PC. Atau isi alamat manual di Pengaturan."
+                val name = Prefs.pcName.ifEmpty { "PC" }
+                // PC lain (mis. laptop satunya) ada di Wi-Fi ini? Sarankan, tapi jangan pindah sendiri.
+                val other = if (Prefs.pcId.isNotEmpty()) Net.discoverAll(1).firstOrNull { it.id.isNotEmpty() && it.id != Prefs.pcId } else null
+                Status.line = when {
+                    other != null -> "PC tidak ditemukan. $name tidak terjangkau. ${other.host.ifEmpty { "PC lain" }} ada di Wi-Fi ini: ketuk Ganti untuk mengirim ke sana."
+                    Prefs.remoteServer.isNotEmpty() -> "PC tidak ditemukan. $name tidak terjangkau. Di luar jaringan? Nyalakan Tailscale di HP."
+                    else -> "PC tidak ditemukan. Pastikan DropBridge jalan di $name dan HP satu Wi-Fi (atau hotspot) dengannya."
+                }
                 return
             }
             try {
-                val token = Net.ensureToken(base, true)
+                val token = Net.ensureToken(base)
                 Net.folders(base, token)
                 try {
                     val info = Net.getJson(base, token, "/api/info")
                     val n = info.optString("pc_name", "")
                     if (n.isNotEmpty()) Prefs.pcName = n
                     Prefs.pcVersion = info.optString("version", "")
+                    info.optString("pc_id", "").let { if (it.isNotEmpty()) Prefs.pcId = it }
+                    info.optString("os", "").let { if (it.isNotEmpty()) Prefs.pcOs = it }
                     Net.learnRemote(info)
                 } catch (e: Exception) { /* server lama: tanpa nama PC */ }
+                Pcs.saveActive()
                 Status.line = "Tersambung ke PC ($base)." + if (Net.viaRemote) " Lewat internet (Tailscale)." else ""
                 a.runOnUiThread { onAddr(base) }
                 if (Queue.all().isNotEmpty() && !UploadService.running) {
                     a.runOnUiThread { UploadService.start(a) }
                 }
             } catch (e: NetError) {
-                Status.line = if (e.code == 401) "PIN salah. Cek PIN di layar PC." else "Gagal masuk: ${e.message}"
+                Status.line = when {
+                    e.code == 403 && e.message == Net.PENDING -> Net.PENDING
+                    e.code == 401 && (e.message ?: "").startsWith("Ditolak") -> e.message ?: "Ditolak oleh PC."
+                    e.code == 401 -> "PIN salah. Cek PIN di layar PC."
+                    else -> "Gagal masuk: ${e.message}"
+                }
             } catch (e: Exception) {
                 Status.line = "Gagal terhubung: ${e.message}"
             }

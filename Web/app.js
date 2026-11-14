@@ -187,9 +187,9 @@
   function renderStatus() {
     const t = $('#statusText');
     if (!online) { t.textContent = 'Terputus dari ' + pcLabel() + ' · cek Wi-Fi'; return; }
-    const n = devInfo.online || 0;
+    const n = devInfo.phones != null ? devInfo.phones : (devInfo.online || 0);
     // Jalur sambungan: Wi-Fi/hotspot yang sama (tanpa internet) atau Tailscale (lewat internet)
-    t.textContent = isOnPc ? `${n} perangkat terhubung` : `Terhubung ke ${pcLabel()}` + (via === 'tailscale' ? ' · lewat internet (Tailscale)' : ' · Wi-Fi lokal, tanpa internet');
+    t.textContent = isOnPc ? (n ? `${n} HP terhubung` : 'Belum ada HP terhubung') : `Terhubung ke ${pcLabel()}` + (via === 'tailscale' ? ' · lewat internet (Tailscale)' : ' · Wi-Fi lokal, tanpa internet');
   }
 
   function setTitle() {
@@ -403,6 +403,10 @@
 
   function applyRoute() {
     route = parseHash();
+    if (myRole !== 'full' && route.type !== 'send' && route.type !== 'more' && route.type !== 'welcome') {
+      route = { type: 'send' };
+      if (location.hash && location.hash !== '#/') history.replaceState(null, '', '#/');
+    }
     files = [];
     filesSig = '';
     const home = route.type === 'home';
@@ -419,6 +423,7 @@
     $('#folderView').hidden = !inFolder();
     closeMenu();
     setTitle();
+    renderUpdated();
     window.scrollTo(0, 0);
     if (route.type === 'folder') {
       setTarget(route.name);
@@ -785,10 +790,10 @@
   }
 
   async function removeFile(f) {
-    if (!confirm(`Hapus "${f.name}" dari PC? Tindakan ini tidak bisa dibatalkan.`)) return;
+    if (!confirm(`Hapus "${f.name}" dari PC?\n\nFile dipindah ke Recycle Bin / Tempat Sampah di PC, jadi masih bisa dikembalikan dari sana.`)) return;
     try {
-      await api('/api/files/' + enc(f.name) + '?folder=' + enc(curFolder()), { method: 'DELETE' });
-      toast('File dihapus');
+      const r = await api('/api/files/' + enc(f.name) + '?folder=' + enc(curFolder()), { method: 'DELETE' });
+      toast('File dipindah ke ' + (r.trash || 'Tempat Sampah'));
       await Promise.all([loadFiles(), loadFolders()]);
     } catch (e) { toast(e.message, 'err'); }
   }
@@ -823,13 +828,13 @@
     if (childrenOf(name).length) { toast('Folder ini berisi subfolder. Hapus subfoldernya dulu.', 'err'); return; }
     let count = files.length;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const ok = confirm(`Hapus folder "${pathLabel(name)}" beserta ${count} file di dalamnya dari PC?\n\nTindakan ini permanen dan tidak bisa dibatalkan.`);
+      const ok = confirm(`Hapus folder "${pathLabel(name)}" beserta ${count} file di dalamnya dari PC?\n\nFolder dipindah ke Recycle Bin / Tempat Sampah di PC, jadi masih bisa dikembalikan dari sana.`);
       if (!ok) return;
       try {
-        await api('/api/folders/' + encPath(name) + '?expect=' + count, { method: 'DELETE' });
+        const r = await api('/api/folders/' + encPath(name) + '?expect=' + count, { method: 'DELETE' });
         if ($('#folderInput').value === name) setTarget('');
         if (store.get('db_target') === name) store.set('db_target', '');
-        toast('Folder dihapus');
+        toast('Folder dipindah ke ' + (r.trash || 'Tempat Sampah'));
         location.hash = parentOf(name) ? '#/f/' + enc(parentOf(name)) : '#/folders';
         loadFolders().catch(() => {});
         return;
@@ -1509,18 +1514,39 @@
   $('#setClose').addEventListener('click', () => $('#setDlg').close());
 
   // ---------- Login / sesi ----------
+  let lastRefresh = 0;
   async function refresh() {
     try {
-      const jobs = [loadFolders(), loadClips()];
-      if (inFolder()) jobs.push(loadFiles());
+      const jobs = [loadFolders()];
+      if (myRole === 'full') jobs.push(loadClips());
+      if (inFolder() && myRole === 'full') jobs.push(loadFiles());
       if (route.type === 'more') jobs.push(renderDevices());
-      if (route.type === 'send') jobs.push(loadRecent());
+      if (route.type === 'send' && myRole === 'full') jobs.push(loadRecent());
       await Promise.all(jobs);
       setOnline(true);
+      lastRefresh = Date.now();
+      renderUpdated();
     } catch (e) {
       if (e instanceof TypeError) setOnline(false); // jaringan putus
     }
   }
+
+  // Ikon muat ulang di kepala halaman File (berputar saat memuat) + "diperbarui 10.19"
+  function renderUpdated() {
+    const files = route.type !== 'send' && route.type !== 'more' && route.type !== 'welcome';
+    $('#refreshBtn').hidden = !files;
+    $('#refreshBtn').title = lastRefresh
+      ? 'Muat ulang · diperbarui ' + new Date(lastRefresh).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      : 'Muat ulang';
+  }
+  $('#refreshBtn').addEventListener('click', async () => {
+    const b = $('#refreshBtn');
+    if (b.classList.contains('spin')) return;
+    b.classList.add('spin');
+    foldersSig = filesSig = '';
+    try { await refresh(); toast('Diperbarui ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })); }
+    finally { setTimeout(() => b.classList.remove('spin'), 400); }
+  });
 
   // Kecilkan foto: diatur dari Pengaturan, ringkasannya tampil di halaman Kirim.
   function renderShrink() {
@@ -1563,14 +1589,27 @@
   // ---------- Identitas perangkat ----------
   let myName = '';
   let myLocal = false;
+  let myRole = 'full';
+
+  function applyRole(role) {
+    const changed = role !== myRole;
+    myRole = role || 'full';
+    document.body.classList.toggle('role-send', myRole !== 'full');
+    if (changed && loggedIn) applyRoute();
+  }
 
   async function checkName() {
     try {
       const s = await api('/api/session');
       myName = s.name || '';
       myLocal = !!s.local;
+      applyRole(s.role);
+      $('#pinBtn').hidden = !myLocal;
+      $('#approveRow').hidden = !myLocal;
+      if (myLocal) startPendingWatch();
       $('#myName').textContent = myName || 'Belum diberi nama';
       $('#devOthers').hidden = !myLocal;
+      if (myLocal) api('/api/devices/pending').then((d) => { $('#approveChk').checked = !!d.approve_new; }).catch(() => {});
       $('#devNote').hidden = myLocal;
       if (!myName) {
         const saved = store.get('db_devname');
@@ -1622,30 +1661,135 @@
     } catch { /* abaikan */ }
   }
 
+  const roleName = (r) => (r === 'full' ? 'Penuh' : 'Hanya kirim');
+
   async function renderDevices() {
     const box = $('#devList');
     try {
       const d = await api('/api/devices');
-      box.replaceChildren(...d.devices.map((v) => el('div', { class: 'dev-row' + (appOld(v.app) ? ' dev-old' : '') },
-        el('span', { class: 'dev-dot' + (v.online ? ' on' : ''), title: v.online ? 'Online' : 'Tidak aktif' }),
-        el('div', { class: 'dev-info' },
-          el('div', { class: 'dev-name', text: v.name + (v.current ? ' (perangkat ini)' : '') }),
-          el('div', { class: 'dev-sub muted', text: `${v.app ? 'Aplikasi ' + v.app : v.kind} · ${v.ip} · ${v.online ? 'online' : ago(v.last_seen)}` }),
-          appOld(v.app) ? el('div', { class: 'dev-old-note', text: `Versi lama. Perbarui ke ${android.version} lewat kartu Aplikasi Android.` }) : ''),
-        v.current || !myLocal ? '' : el('button', {
-          class: 'btn ghost small danger', type: 'button', text: 'Keluarkan',
-          onclick: async () => {
-            try { await api('/api/devices/' + v.id, { method: 'DELETE' }); toast('Perangkat dikeluarkan'); renderDevices(); updateDevCount(); }
-            catch (err) { toast(err.message, 'err'); }
-          },
-        }))));
+      box.replaceChildren(...d.devices.map((v) => {
+        const sub = v.pending
+          ? `Menunggu izin · ${v.kind} · ${v.ip}`
+          : `${v.app ? 'Aplikasi ' + v.app : v.kind} · ${v.ip} · ${v.online ? 'online' : ago(v.last_seen)}`;
+        const btns = el('div', { class: 'dev-btns' });
+        if (v.pending && myLocal) {
+          btns.append(
+            el('button', { class: 'btn small', type: 'button', text: 'Tolak', onclick: () => answer(v, false) }),
+            el('button', { class: 'btn small primary', type: 'button', text: 'Izinkan', onclick: () => openApprove(v) }));
+        } else if (!v.local) {
+          const chip = myLocal
+            ? el('button', {
+              class: 'role-chip ' + v.role, type: 'button', text: roleName(v.role),
+              title: 'Ketuk untuk mengubah hak', 'aria-label': 'Hak: ' + roleName(v.role) + '. Ketuk untuk mengubah.',
+              onclick: async () => {
+                const to = v.role === 'full' ? 'send' : 'full';
+                if (!confirm(`Ubah hak ${v.name} menjadi "${roleName(to)}"?`)) return;
+                try { await api('/api/devices/' + v.id + '/role', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ role: to }) }); toast('Hak diubah: ' + roleName(to)); renderDevices(); }
+                catch (err) { toast(err.message, 'err'); }
+              },
+            })
+            : el('span', { class: 'role-chip ' + v.role, text: roleName(v.role) });
+          btns.append(chip);
+          if (myLocal && !v.current) btns.append(el('button', {
+            class: 'btn ghost small danger', type: 'button', text: 'Putuskan',
+            onclick: async () => {
+              if (!confirm(`Putuskan ${v.name}? Untuk terhubung lagi, HP itu perlu PIN dan izin dari laptop ini.`)) return;
+              try { await api('/api/devices/' + v.id, { method: 'DELETE' }); toast('Perangkat diputuskan'); renderDevices(); updateDevCount(); }
+              catch (err) { toast(err.message, 'err'); }
+            },
+          }));
+        }
+        return el('div', { class: 'dev-row' + (v.pending ? ' pending' : '') + (appOld(v.app) ? ' dev-old' : '') },
+          el('span', { class: 'dev-dot' + (v.online ? ' on' : ''), title: v.online ? 'Online' : 'Tidak aktif' }),
+          el('div', { class: 'dev-info' },
+            el('div', { class: 'dev-name', text: v.name + (v.current ? ' (perangkat ini)' : '') }),
+            el('div', { class: 'dev-sub muted', text: sub }),
+            appOld(v.app) ? el('div', { class: 'dev-old-note', text: `Versi lama. Perbarui ke ${android.version} lewat kartu Aplikasi Android.` }) : ''),
+          btns);
+      }));
     } catch (err) { box.textContent = err.message; }
   }
 
+  // ---------- Izin HP baru (hanya di PC ini) ----------
+  let apDev = null;
+  let apRole = 'send';
+  let apTimer = 0;
+  let pendingTimer = 0;
+  const mmss = (n) => Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
+
+  function startPendingWatch() {
+    if (pendingTimer) return;
+    const tick = async () => {
+      if (!loggedIn || !myLocal) return;
+      try {
+        const d = await api('/api/devices/pending');
+        const next = (d.pending || [])[0];
+        if (next && !$('#approveDlg').open) openApprove(next);
+        if (!next && $('#approveDlg').open) $('#approveDlg').close();
+        if (next || route.type === 'more') { if (route.type === 'more') renderDevices(); }
+      } catch { /* abaikan */ }
+    };
+    tick();
+    pendingTimer = setInterval(tick, 2500);
+  }
+
+  function setApRole(r) {
+    apRole = r;
+    for (const b of $$('.ap-roles button')) b.setAttribute('aria-checked', String(b.dataset.role === r));
+  }
+  for (const b of $$('.ap-roles button')) b.addEventListener('click', () => setApRole(b.dataset.role));
+
+  function openApprove(v) {
+    apDev = v;
+    setApRole('send');
+    $('#apSub').textContent = [v.name, v.name === v.kind ? '' : v.kind, v.ip, 'PIN benar'].filter(Boolean).join(' · ');
+    let left = v.wait || 120;
+    $('#apLeft').textContent = mmss(left);
+    clearInterval(apTimer);
+    apTimer = setInterval(() => {
+      left = Math.max(0, left - 1);
+      $('#apLeft').textContent = mmss(left);
+      if (!left) { clearInterval(apTimer); if ($('#approveDlg').open) $('#approveDlg').close(); }
+    }, 1000);
+    if (!$('#approveDlg').open) $('#approveDlg').showModal();
+    $('#apAllow').focus();
+  }
+
+  async function answer(v, allow) {
+    try {
+      if (allow) await api('/api/devices/' + v.id + '/approve', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ role: apRole }) });
+      else await api('/api/devices/' + v.id + '/reject', { method: 'POST' });
+      toast(allow ? `${v.name} diizinkan (${roleName(apRole)})` : `${v.name} ditolak`);
+    } catch (err) { toast(err.message, 'err'); }
+    clearInterval(apTimer);
+    if ($('#approveDlg').open) $('#approveDlg').close();
+    apDev = null;
+    updateDevCount();
+    if (route.type === 'more') renderDevices();
+  }
+  $('#apAllow').addEventListener('click', () => { if (apDev) answer(apDev, true); });
+  $('#apReject').addEventListener('click', () => { if (apDev) answer(apDev, false); });
+  $('#approveDlg').addEventListener('cancel', (e) => { e.preventDefault(); if (apDev) answer(apDev, false); });
+
+  $('#approveChk').addEventListener('change', async (e) => {
+    try { await api('/api/settings/approve', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ on: e.target.checked }) }); }
+    catch (err) { toast(err.message, 'err'); e.target.checked = !e.target.checked; }
+  });
+
+  $('#pinBtn').addEventListener('click', async () => {
+    if (!confirm('Ganti PIN dengan angka acak baru?\n\nHP yang sudah terhubung tetap terhubung. HP baru memakai PIN baru.')) return;
+    try {
+      const r = await api('/api/pin', { method: 'POST', headers: JSON_HEADERS, body: '{}' });
+      toast('PIN baru: ' + r.pin);
+      $('#pinLine').textContent = 'PIN sekarang: ' + r.pin;
+      renderAddr();
+    } catch (err) { toast(err.message, 'err'); }
+  });
+
   $('#renameBtn').addEventListener('click', openName);
   $('#devOthers').addEventListener('click', async () => {
-    if (!confirm('Keluarkan semua perangkat lain? Mereka harus memasukkan PIN lagi.')) return;
-    try { const r = await api('/api/devices/revoke-others', { method: 'POST' }); toast(r.revoked + ' perangkat dikeluarkan'); renderDevices(); updateDevCount(); }
+    if (!confirm('Putuskan semua HP? Untuk terhubung lagi, mereka perlu PIN dan izin dari laptop ini.')) return;
+    try { const r = await api('/api/devices/revoke-others', { method: 'POST' }); toast(r.revoked + ' perangkat diputuskan'); renderDevices(); updateDevCount(); }
     catch (err) { toast(err.message, 'err'); }
   });
   setInterval(() => { if (loggedIn && !document.hidden) updateDevCount(); }, 15000);
@@ -1655,14 +1799,61 @@
     const pin = $('#pin').value.trim();
     if (!pin) return;
     try {
-      await api('/api/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ pin, name: store.get('db_devname') }) });
       $('#pin').value = '';
-      showApp();
+      await doLogin(pin);
     } catch (err) {
       $('#loginError').textContent = err.message;
       $('#pin').select();
     }
   });
+
+  // Kode perangkat tetap: PC mengingat izin perangkat ini, jadi login ulang tidak perlu izin lagi
+  function deviceId() {
+    let id = store.get('db_devid');
+    if (!id) { id = 'w' + Math.random().toString(36).slice(2) + Date.now().toString(36); store.set('db_devid', id); }
+    return id;
+  }
+
+  async function doLogin(pin) {
+    const r = await api('/api/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ pin, name: store.get('db_devname'), device: deviceId() }) });
+    if (r.pending) waitApproval(); else showApp();
+  }
+
+  let waitTimer = 0;
+  function waitApproval() {
+    loggedIn = false;
+    $('#app').hidden = true;
+    $('#login').hidden = false;
+    $('#loginForm').hidden = true;
+    $('#waitBox').hidden = false;
+    clearInterval(waitTimer);
+    const stop = (msg) => {
+      clearInterval(waitTimer);
+      $('#waitBox').hidden = true;
+      $('#loginForm').hidden = false;
+      showLogin();
+      if (msg) $('#loginError').textContent = msg;
+    };
+    const poll = async () => {
+      try {
+        const r = await fetch('/api/session', { credentials: 'same-origin' });
+        if (r.status === 401) {
+          let d = {}; try { d = await r.json(); } catch { /* abaikan */ }
+          stop(typeof d.detail === 'string' && d.detail !== 'Belum login.' ? d.detail : 'Waktu tunggu habis. Masukkan PIN lagi.');
+          return;
+        }
+        const d = await r.json();
+        if (!d.pending) { clearInterval(waitTimer); $('#waitBox').hidden = true; $('#loginForm').hidden = false; showApp(); return; }
+        $('#waitLeft').textContent = mmss(d.wait || 0);
+      } catch { /* jaringan: coba lagi */ }
+    };
+    poll();
+    waitTimer = setInterval(poll, 2000);
+    $('#waitCancel').onclick = async () => {
+      try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); } catch { /* abaikan */ }
+      stop('');
+    };
+  }
 
   $('#logout').addEventListener('click', async () => {
     try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); } catch { /* abaikan */ }
@@ -1680,14 +1871,13 @@
       // Dibuka dari kode QR di PC: hapus PIN dari alamat, lalu masuk otomatis.
       history.replaceState(null, '', location.pathname + location.hash);
       try {
-        await api('/api/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ pin: qpin.trim(), name: store.get('db_devname') }) });
-        showApp();
+        await doLogin(qpin.trim());
         return;
       } catch { /* lanjut ke login biasa */ }
     }
     try {
       const r = await fetch('/api/session', { credentials: 'same-origin' });
-      if (r.ok) showApp(); else showLogin();
+      if (r.ok) { const d = await r.json(); if (d.pending) waitApproval(); else showApp(); } else showLogin();
     } catch {
       showLogin();
       $('#loginError').textContent = 'Tidak bisa terhubung ke PC. Cek Wi-Fi dan alamatnya.';

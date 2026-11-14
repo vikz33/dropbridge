@@ -73,7 +73,8 @@ DEFAULTS = {
     "idle_hours": 8,  # perangkat lain otomatis keluar bila tidak aktif sekian jam (0 = nonaktif)
     "lan_only": True,  # tolak koneksi dari luar jaringan lokal
     "enable_docs": False,  # true = buka dokumentasi API di /docs
-    "notify": True,  # notifikasi Windows saat file masuk (versi desktop)
+    "notify": True,  # notifikasi saat file masuk (versi desktop)
+    "approve_new": True,  # HP baru harus diizinkan dari PC ini walau PIN-nya benar
     "welcomed": "",  # versi terakhir yang sudah melihat halaman Selamat datang
 }
 
@@ -110,6 +111,18 @@ class Settings:
         self.lan_only: bool = bool(cfg["lan_only"])
         self.enable_docs: bool = bool(cfg["enable_docs"])
         self.notify: bool = bool(cfg["notify"])
+        self.approve_new: bool = bool(cfg["approve_new"])
+        # Kode tetap PC ini: aplikasi Android mengenali PC yang sama walau alamat IP-nya berubah
+        self.pc_id: str = str(raw.get("pc_id") or "")
+        if not self.pc_id:
+            self.pc_id = "pc" + secrets.token_hex(6)
+            try:
+                raw2 = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig")) if CONFIG_PATH.exists() else dict(cfg)
+                raw2["pc_id"] = self.pc_id
+                USER_DIR.mkdir(parents=True, exist_ok=True)
+                CONFIG_PATH.write_text(json.dumps(raw2, indent=2, ensure_ascii=False), encoding="utf-8")
+            except (OSError, ValueError):
+                pass
         self.welcomed: str = str(cfg["welcomed"])
         self.imported_from: str = str(raw.get("imported_from", ""))
         self.data_dir: Path = USER_DIR / "data"
@@ -122,6 +135,10 @@ class Settings:
         self.web_dir: Path = RES_DIR / "web" if FROZEN else ROOT_DIR / "Web"
         # APK Android untuk diunduh HP: ikut di installer, atau hasil build_apk.bat (folder Rilis)
         self.apk_dirs = [RES_DIR / "apk", ROOT_DIR / "Rilis"]
+
+
+def os_label() -> str:
+    return {"win32": "Windows", "darwin": "Mac"}.get(sys.platform, "Linux")
 
 
 def save_setting(key: str, value) -> None:

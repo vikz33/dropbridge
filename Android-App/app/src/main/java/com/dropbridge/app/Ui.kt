@@ -53,6 +53,7 @@ object Icon {
     const val CLOCK = 25
     const val FOLDER_PLUS = 26
     const val GLOBE = 27
+    const val REFRESH = 28
 }
 
 class IconView(ctx: Context, private val kind: Int, private val color: Int, private val sizeDp: Int = 24, private val sw: Float = 1.9f) : View(ctx) {
@@ -208,6 +209,13 @@ class IconView(ctx: Context, private val kind: Int, private val color: Int, priv
                 c.drawPath(path, p)
                 p.style = Paint.Style.STROKE
             }
+            Icon.REFRESH -> {
+                // dua panah melingkar
+                c.drawArc(RectF(4f, 4f, 20f, 20f), 200f, 130f, false, p)
+                c.drawArc(RectF(4f, 4f, 20f, 20f), 20f, 130f, false, p)
+                poly(c, false, 4.5f, 5f, 4.6f, 9.2f, 8.8f, 9f)
+                poly(c, false, 19.5f, 19f, 19.4f, 14.8f, 15.2f, 15f)
+            }
             Icon.GLOBE -> {
                 c.drawCircle(12f, 12f, 9f, p)
                 c.drawOval(RectF(8f, 3f, 16f, 21f), p)
@@ -263,7 +271,18 @@ class BarView(ctx: Context) : View(ctx) {
     }
 }
 
-class Screen(val root: LinearLayout, val content: LinearLayout, val title: TextView, val subtitle: TextView, val chip: TextView)
+class Screen(val root: LinearLayout, val content: LinearLayout, val title: TextView, val subtitle: TextView, val chip: TextView) {
+    /** Ikon muat ulang di kepala layar (bila layar memintanya); berputar selama memuat. */
+    var refresh: View? = null
+    fun spin(on: Boolean) {
+        val v = refresh ?: return
+        v.animate().cancel()
+        if (on) {
+            v.rotation = 0f
+            v.animate().rotationBy(3600f).setDuration(10000).setInterpolator(android.view.animation.LinearInterpolator()).start()
+        } else v.animate().rotation(0f).setDuration(150).start()
+    }
+}
 
 /** Tema bersama: warna, kartu, tombol, kolom isian, dan kerangka layar. */
 object Ui {
@@ -461,7 +480,8 @@ object Ui {
         }
 
     /** Kerangka layar: kepala (tombol kembali atau logo + judul), isi yang bisa digulir, bilah bawah opsional. */
-    fun screen(a: Activity, title: String, subtitle: String? = null, back: Boolean = true, bottom: View? = null, nav: Int = -1): Screen {
+    fun screen(a: Activity, title: String, subtitle: String? = null, back: Boolean = true, bottom: View? = null, nav: Int = -1,
+               onRefresh: (() -> Unit)? = null): Screen {
         applyTheme(a)
         val root = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL
@@ -502,6 +522,20 @@ object Ui {
             visibility = View.GONE
         }
         head.addView(chip, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(a, 8) })
+        var refreshIcon: View? = null
+        if (onRefresh != null) {
+            val ic = IconView(a, Icon.REFRESH, INK, 22, 2f)
+            refreshIcon = ic
+            val r = FrameLayout(a).apply {
+                isClickable = true
+                isFocusable = true
+                contentDescription = "Muat ulang"
+                background = ripple(a, CARD, 14, LINE)
+                setOnClickListener { onRefresh() }
+                addView(ic, FrameLayout.LayoutParams(dp(a, 22), dp(a, 22), Gravity.CENTER))
+            }
+            head.addView(r, LinearLayout.LayoutParams(dp(a, 44), dp(a, 44)).apply { leftMargin = dp(a, 8) })
+        }
         if (nav >= 0) {
             val g = FrameLayout(a).apply {
                 isClickable = true
@@ -533,7 +567,7 @@ object Ui {
         }
         systemBars(a)
         a.setContentView(root)
-        return Screen(root, content, t, st, chip)
+        return Screen(root, content, t, st, chip).also { it.refresh = refreshIcon }
     }
 
     const val TAB_SEND = 0
@@ -577,6 +611,7 @@ object Ui {
             Triple("Hubungkan", Icon.QR, TAB_HOST),
         )
         for ((label, icon, tab) in items) {
+            if (tab == TAB_FILES && Prefs.role == "send" && active != TAB_FILES) continue  // HP "hanya kirim": tanpa menu File
             val on = tab == active
             val col = LinearLayout(a).apply {
                 orientation = LinearLayout.VERTICAL

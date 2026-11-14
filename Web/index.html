@@ -20,6 +20,12 @@
       <p id="loginError" class="error" role="alert"></p>
       <div class="addr" data-addr hidden></div>
     </form>
+    <section id="waitBox" class="card login-card wait-card" hidden aria-live="polite">
+      <h1 class="wait-h">Menunggu izin dari PC</h1>
+      <p class="muted">PIN benar. Minta pemilik PC menekan <b>Izinkan</b> di layar DropBridge.</p>
+      <p class="muted small">Otomatis dibatalkan dalam <span id="waitLeft">2:00</span></p>
+      <button id="waitCancel" class="btn" type="button">Batal</button>
+    </section>
   </main>
 
   <div id="app" class="wrap" hidden>
@@ -34,9 +40,14 @@
         <a href="#/folders" data-nav="folders"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>File</span></a>
         <a href="#/hubungkan" data-nav="more"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z"/></svg><span>Hubungkan</span></a>
       </nav>
+      <div class="top-acts">
+      <button id="refreshBtn" class="iconbtn refresh" type="button" aria-label="Muat ulang" title="Muat ulang" hidden>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg>
+      </button>
       <button id="setBtn" class="iconbtn gear" type="button" aria-label="Pengaturan" title="Pengaturan">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
       </button>
+      </div>
     </header>
 
     <main id="pageSend" class="page send-page">
@@ -217,9 +228,12 @@
       <section class="card more-card">
         <div class="dev-head">
           <h2>Perangkat terhubung</h2>
-          <button id="devOthers" class="btn ghost small danger" type="button">Keluarkan semua</button>
+          <span class="dev-acts">
+            <button id="pinBtn" class="btn ghost small" type="button" hidden>Ganti PIN</button>
+            <button id="devOthers" class="btn ghost small danger" type="button">Putuskan semua</button>
+          </span>
         </div>
-        <p class="muted small">Perangkat yang tidak aktif 8 jam otomatis keluar.</p>
+        <p class="muted small">Perangkat yang tidak aktif 8 jam otomatis keluar. <span id="pinLine"></span></p>
         <p id="devNote" class="muted small" hidden>Mengeluarkan perangkat hanya bisa dari PC.</p>
         <div id="devList" class="dev-list"></div>
       </section>
@@ -270,6 +284,10 @@
         <span><b>Notifikasi saat file masuk</b><small>Muncul di pojok layar laptop ini, mis. "4 file masuk ke TRHU-4134291 › 30-1".</small></span>
         <input id="notifyChk" type="checkbox">
       </label>
+      <label class="mrow" id="approveRow" hidden>
+        <span><b>Minta izin untuk HP baru</b><small>HP yang baru memasukkan PIN harus diizinkan dulu dari laptop ini.</small></span>
+        <input id="approveChk" type="checkbox" checked>
+      </label>
       <label class="mrow" id="shrinkRow">
         <span><b>Kecilkan foto ke bawah <span id="shrinkKB">512</span> KB</b><small>Matikan untuk resolusi penuh, mis. foto liburan.</small></span>
         <input id="shrinkPhotos" type="checkbox" checked>
@@ -282,10 +300,27 @@
     </div>
   </dialog>
 
+  <dialog id="approveDlg" class="small-dlg approve-dlg" aria-labelledby="apTitle">
+    <div class="dlg-body">
+      <div class="ap-head"><span class="ap-ic" aria-hidden="true"></span>
+        <span><h3 id="apTitle">HP baru ingin terhubung</h3><small id="apSub" class="muted"></small></span></div>
+      <p class="lbl">Boleh apa saja?</p>
+      <div class="ap-roles" role="radiogroup" aria-label="Hak perangkat">
+        <button type="button" role="radio" data-role="send" aria-checked="true"><b>Hanya kirim</b><small>Bisa mengirim, tidak bisa melihat atau menghapus</small></button>
+        <button type="button" role="radio" data-role="full" aria-checked="false"><b>Penuh</b><small>Kirim, lihat, unduh, pindah, hapus</small></button>
+      </div>
+      <div class="dlg-actions ap-actions">
+        <button id="apReject" class="btn" type="button">Tolak</button>
+        <button id="apAllow" class="btn primary" type="button">Izinkan</button>
+      </div>
+      <p class="muted small ap-left">Otomatis ditolak dalam <span id="apLeft">2:00</span> bila tidak dijawab</p>
+    </div>
+  </dialog>
+
   <dialog id="rootDlg" class="small-dlg">
     <div class="dlg-body">
       <h3>Folder tujuan belum diisi</h3>
-      <p class="muted">Kirim file ini ke <b>Tanpa folder</b> (langsung di folder shared), atau isi nama folder dulu?</p>
+      <p class="muted">Kirim file ini ke <b>Tanpa folder</b> (langsung di folder penyimpanan), atau isi nama folder dulu?</p>
       <div class="dlg-actions">
         <button id="rootFill" class="btn ghost" type="button">Isi folder dulu</button>
         <button id="rootGo" class="btn primary" type="button">Kirim tanpa folder</button>

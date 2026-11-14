@@ -12,6 +12,7 @@ dist/
 *.apk
 *.log
 build_exe_log.txt
+build_deb_log.txt
 build_log.txt
 
 # Python

@@ -2,6 +2,11 @@
 
 Tiap sesi mewakili satu perangkat: nama, jenis, IP, dan waktu aktif terakhir tercatat
 supaya pemilik PC bisa melihat siapa saja yang terhubung dan mengeluarkannya.
+
+Pengaman (2.5.0):
+- HP baru yang PIN-nya benar tetap "menunggu" sampai PC ini menekan Izinkan (bisa dimatikan: approve_new).
+- Hak per perangkat: "full" (kirim, lihat, unduh, pindah, hapus) atau "send" (hanya mengirim).
+- Perangkat yang sudah diizinkan diingat lewat kode perangkat (data/trusted.json), jadi login ulang tidak perlu izin lagi.
 """
 import ipaddress
 import json
@@ -14,13 +19,16 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from .config import settings
+from . import events
+from .config import save_setting, settings
 from .netinfo import all_ips
 
 COOKIE = "db_token"
 MAX_FAILS = 5
 LOCK_SECONDS = 60
 ONLINE_SECONDS = 75  # dianggap "online" jika aktif dalam rentang ini
+PENDING_SECONDS = 120  # izin dari PC ditunggu selama ini, lalu otomatis ditolak
+ROLES = ("full", "send")
 
 SAVE_EVERY = 60  # detik; waktu "aktif terakhir" disimpan paling sering sekali per menit
 
@@ -33,6 +41,27 @@ _SESS_FILE = settings.data_dir / "sessions.json"
 _lock = threading.Lock()
 _last_save = 0.0
 _KEYS = ("id", "created", "last", "expires", "name", "kind", "ip", "ua", "local")
+_EXTRA = {"status": "ok", "role": "full", "dev": ""}  # kunci baru 2.5.0; sesi lama otomatis sudah diizinkan, hak penuh
+_rejected: dict[str, float] = {}  # token yang ditolak PC -> waktu, supaya HP yang menunggu tahu hasilnya
+
+# Perangkat yang sudah diizinkan: kode perangkat -> {role, name, approved}
+_TRUST_FILE = settings.data_dir / "trusted.json"
+try:
+    _trusted: dict[str, dict] = json.loads(_TRUST_FILE.read_text(encoding="utf-8"))
+    if not isinstance(_trusted, dict):
+        _trusted = {}
+except (OSError, ValueError):
+    _trusted = {}
+
+
+def _save_trust() -> None:
+    try:
+        _TRUST_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _TRUST_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(_trusted), encoding="utf-8")
+        os.replace(tmp, _TRUST_FILE)
+    except OSError:
+        pass
 
 
 def _load() -> None:
@@ -43,7 +72,7 @@ def _load() -> None:
     now = time.time()
     for token, s in (raw.items() if isinstance(raw, dict) else []):
         if isinstance(s, dict) and all(k in s for k in _KEYS) and s["expires"] > now:
-            _sessions[token] = {k: s[k] for k in _KEYS}
+            _sessions[token] = {k: s[k] for k in _KEYS} | {k: s.get(k, v) for k, v in _EXTRA.items()}
 
 
 def _save() -> None:
@@ -139,20 +168,39 @@ def _idle_limit() -> float:
 def _alive(s: dict, now: float) -> bool:
     if s["expires"] < now:
         return False
+    if s.get("status") == "pending" and now - s["created"] > PENDING_SECONDS:
+        return False
     limit = _idle_limit()
     if limit > 0 and not s["local"] and now - s["last"] > limit:
         return False
     return True
 
 
-def require_auth(request: Request) -> None:
+def _session_or_401(request: Request) -> dict:
     token = _token_from(request)
     s = _sessions.get(token) if token else None
     now = time.time()
     if not s or not _alive(s, now):
         if token:
-            _sessions.pop(token, None)
+            gone = _sessions.pop(token, None)
+            if gone and gone.get("status") == "pending":
+                _rejected[token] = now  # waktu tunggu habis = ditolak
+        if token and token in _rejected:
+            raise HTTPException(status_code=401, detail="Ditolak oleh PC. Minta pemilik PC menekan Izinkan, lalu masukkan PIN lagi.")
         raise HTTPException(status_code=401, detail="Belum login.")
+    return s
+
+
+def require_session(request: Request) -> None:
+    """Sesi yang masih menunggu izin juga boleh (hanya untuk mengecek status)."""
+    _session_or_401(request)
+
+
+def require_auth(request: Request) -> None:
+    s = _session_or_401(request)
+    now = time.time()
+    if s.get("status") == "pending":
+        raise HTTPException(status_code=403, detail="Menunggu izin dari PC.")
     s["last"] = now
     s["ip"] = _client_ip(request)
     ua = request.headers.get("user-agent", "")[:300]
@@ -160,6 +208,13 @@ def require_auth(request: Request) -> None:
         s["ua"] = ua  # mis. aplikasi Android diperbarui: versinya ikut tercatat
     if now - _last_save > SAVE_EVERY:
         _save()
+
+
+def require_full(request: Request) -> None:
+    """Melihat, mengunduh, memindah, dan menghapus: hanya perangkat dengan hak penuh."""
+    require_auth(request)
+    if _current(request).get("role") != "full":
+        raise HTTPException(status_code=403, detail="Perangkat ini hanya boleh mengirim file.")
 
 
 def _current(request: Request) -> dict:
@@ -176,6 +231,11 @@ router = APIRouter(prefix="/api")
 class LoginIn(BaseModel):
     pin: str
     name: str = ""
+    device: str = ""  # kode perangkat tetap (dibuat aplikasi/browser), untuk mengingat izin
+
+
+def _devkey(raw: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]", "", raw or "")[:64]
 
 
 @router.post("/login")
@@ -195,12 +255,21 @@ def login(body: LoginIn, request: Request, response: Response):
     _fails.pop(ip, None)
     ua = request.headers.get("user-agent", "")[:300]
     local = is_this_pc(request)
-    for t in [t for t, s in _sessions.items() if not _alive(s, now) or (s["ip"] == ip and s["ua"] == ua)]:
+    dev = _devkey(body.device)
+    for t in [t for t, s in _sessions.items()
+              if not _alive(s, now) or (s["ip"] == ip and s["ua"] == ua) or (dev and s.get("dev") == dev)]:
         _sessions.pop(t, None)  # sesi usang, atau sesi lama dari perangkat yang sama
     token = secrets.token_urlsafe(32)
     ttl = int(settings.session_hours * 3600)
     kind = _kind_of(ua)
-    name = clean_name(body.name) or ("PC ini" if local else "")
+    trust = _trusted.get(dev) if dev else None
+    name = clean_name(body.name) or ("PC ini" if local else (trust or {}).get("name", ""))
+    if local or not settings.approve_new:
+        status, role = "ok", "full"
+    elif trust:
+        status, role = "ok", trust.get("role", "send")
+    else:
+        status, role = "pending", "send"
     _sessions[token] = {
         "id": "d" + secrets.token_hex(4),
         "created": now,
@@ -211,10 +280,15 @@ def login(body: LoginIn, request: Request, response: Response):
         "ip": ip,
         "ua": ua,
         "local": local,
+        "status": status,
+        "role": role,
+        "dev": dev,
     }
     _save()
     response.set_cookie(COOKIE, token, max_age=ttl, httponly=True, samesite="lax")
-    return {"ok": True, "token": token, "need_name": not name}
+    if status == "pending":
+        events.emit("approve", _public(token, _sessions[token], None, now))
+    return {"ok": True, "token": token, "need_name": not name, "pending": status == "pending", "role": role}
 
 
 @router.post("/logout")
@@ -226,22 +300,28 @@ def logout(request: Request, response: Response):
     return {"ok": True}
 
 
-@router.get("/session", dependencies=[Depends(require_auth)])
+@router.get("/session", dependencies=[Depends(require_session)])
 def session(request: Request):
     s = _current(request)
-    return {"ok": True, "name": s["name"], "kind": s["kind"], "local": s["local"]}
+    left = max(0, int(PENDING_SECONDS - (time.time() - s["created"]))) if s["status"] == "pending" else 0
+    return {"ok": True, "name": s["name"], "kind": s["kind"], "local": s["local"],
+            "pending": s["status"] == "pending", "wait": left, "role": s["role"]}
 
 
 class DeviceIn(BaseModel):
     name: str
 
 
-@router.post("/device", dependencies=[Depends(require_auth)])
+@router.post("/device", dependencies=[Depends(require_session)])
 def rename_device(body: DeviceIn, request: Request):
     name = clean_name(body.name)
     if not name:
         raise HTTPException(status_code=400, detail="Nama perangkat tidak boleh kosong.")
-    _current(request)["name"] = name
+    s = _current(request)
+    s["name"] = name
+    if s.get("dev") in _trusted:
+        _trusted[s["dev"]]["name"] = name
+        _save_trust()
     _save()
     return {"ok": True, "name": name}
 
@@ -258,6 +338,9 @@ def _public(token: str, s: dict, mine: str | None, now: float) -> dict:
         "current": token == mine,
         "local": s["local"],
         "app": _app_version(s["ua"]),  # versi aplikasi Android ("" = lewat browser)
+        "role": s.get("role", "full"),
+        "pending": s.get("status") == "pending",
+        "wait": max(0, int(PENDING_SECONDS - (now - s["created"]))) if s.get("status") == "pending" else 0,
     }
 
 
@@ -270,26 +353,132 @@ def _app_version(ua: str) -> str:
 def devices(request: Request):
     now = time.time()
     mine = _token_from(request)
+    me = _current(request)
     items = [_public(t, s, mine, now) for t, s in _sessions.items() if _alive(s, now)]
-    items.sort(key=lambda d: (not d["current"], -d["last_seen"]))
-    return {"devices": items, "online": sum(1 for d in items if d["online"])}
+    if not me["local"]:
+        # HP hanya melihat daftar perangkat yang sudah diizinkan (tanpa yang menunggu)
+        items = [d for d in items if not d["pending"]]
+        if me.get("role") != "full":
+            items = [d for d in items if d["current"]]
+    items.sort(key=lambda d: (not d["pending"], not d["current"], -d["last_seen"]))
+    ok = [d for d in items if not d["pending"]]
+    return {
+        "devices": items,
+        "online": sum(1 for d in ok if d["online"]),
+        "phones": sum(1 for d in ok if d["online"] and not d["local"]),  # HP/perangkat lain, tanpa PC ini
+        "pending": [d for d in items if d["pending"]],
+    }
+
+
+@router.get("/devices/pending", dependencies=[Depends(require_auth)])
+def pending_devices(request: Request):
+    _require_pc(request)
+    now = time.time()
+    return {"pending": [_public(t, s, None, now) for t, s in _sessions.items()
+                        if _alive(s, now) and s.get("status") == "pending"],
+            "approve_new": settings.approve_new}
 
 
 def _require_pc(request: Request) -> None:
-    """Mengeluarkan perangkat hanya boleh dari PC, supaya HP tidak bisa mengeluarkan PC atau HP lain."""
+    """Mengatur perangkat hanya boleh dari PC, supaya HP tidak bisa mengeluarkan PC atau HP lain."""
     if not _current(request)["local"]:
-        raise HTTPException(status_code=403, detail="Mengeluarkan perangkat hanya bisa dari PC.")
+        raise HTTPException(status_code=403, detail="Mengatur perangkat hanya bisa dari PC.")
+
+
+def _find(device_id: str) -> tuple[str, dict]:
+    for t, s in _sessions.items():
+        if s["id"] == device_id:
+            return t, s
+    raise HTTPException(status_code=404, detail="Perangkat tidak ditemukan (mungkin waktu tunggunya habis).")
+
+
+class RoleIn(BaseModel):
+    role: str = "send"
+
+
+def _trust(s: dict) -> None:
+    if s.get("dev"):
+        _trusted[s["dev"]] = {"role": s["role"], "name": s["name"] or s["kind"], "approved": time.time()}
+        _save_trust()
+
+
+@router.post("/devices/{device_id}/approve", dependencies=[Depends(require_auth)])
+def approve_device(device_id: str, body: RoleIn, request: Request):
+    _require_pc(request)
+    if body.role not in ROLES:
+        raise HTTPException(status_code=400, detail="Hak tidak dikenal.")
+    _, s = _find(device_id)
+    s["status"], s["role"] = "ok", body.role
+    _trust(s)
+    _save()
+    return {"ok": True, "role": s["role"]}
+
+
+@router.post("/devices/{device_id}/reject", dependencies=[Depends(require_auth)])
+def reject_device(device_id: str, request: Request):
+    _require_pc(request)
+    t, s = _find(device_id)
+    _sessions.pop(t, None)
+    _rejected[t] = time.time()
+    _save()
+    return {"ok": True}
+
+
+@router.post("/devices/{device_id}/role", dependencies=[Depends(require_auth)])
+def set_role(device_id: str, body: RoleIn, request: Request):
+    _require_pc(request)
+    if body.role not in ROLES:
+        raise HTTPException(status_code=400, detail="Hak tidak dikenal.")
+    _, s = _find(device_id)
+    if s["local"]:
+        raise HTTPException(status_code=400, detail="PC ini selalu berhak penuh.")
+    s["role"] = body.role
+    if s.get("dev") in _trusted:
+        _trusted[s["dev"]]["role"] = body.role
+        _save_trust()
+    _save()
+    return {"ok": True, "role": s["role"]}
 
 
 @router.delete("/devices/{device_id}", dependencies=[Depends(require_auth)])
 def revoke_device(device_id: str, request: Request):
+    """Putuskan: sesi dihapus dan izinnya dilupakan, jadi perangkat itu harus diizinkan lagi."""
     _require_pc(request)
-    for t, s in list(_sessions.items()):
-        if s["id"] == device_id:
-            _sessions.pop(t, None)
-            _save()
-            return {"ok": True}
-    raise HTTPException(status_code=404, detail="Perangkat tidak ditemukan.")
+    t, s = _find(device_id)
+    _sessions.pop(t, None)
+    if _trusted.pop(s.get("dev", ""), None) is not None:
+        _save_trust()
+    _save()
+    return {"ok": True}
+
+
+class PinIn(BaseModel):
+    pin: str = ""
+
+
+@router.post("/pin", dependencies=[Depends(require_auth)])
+def change_pin(body: PinIn, request: Request):
+    """Ganti PIN (kosong = acak 6 angka). Perangkat yang sudah terhubung tidak ikut keluar."""
+    _require_pc(request)
+    new = body.pin.strip() or f"{secrets.randbelow(10**6):06d}"
+    if not re.fullmatch(r"[0-9]{4,10}", new):
+        raise HTTPException(status_code=400, detail="PIN harus 4 sampai 10 angka.")
+    settings.pin = new
+    save_setting("pin", new)
+    return {"ok": True, "pin": new}
+
+
+class ApproveIn(BaseModel):
+    on: bool
+
+
+@router.post("/settings/approve", dependencies=[Depends(require_auth)])
+def set_approve(body: ApproveIn, request: Request):
+    """Nyalakan/matikan izin untuk HP baru."""
+    _require_pc(request)
+    settings.approve_new = body.on
+    save_setting("approve_new", body.on)
+    return {"ok": True, "on": body.on}
 
 
 @router.post("/devices/revoke-others", dependencies=[Depends(require_auth)])
@@ -297,8 +486,10 @@ def revoke_others(request: Request):
     _require_pc(request)
     mine = _token_from(request)
     n = 0
-    for t in [t for t in _sessions if t != mine]:
-        _sessions.pop(t, None)
+    for t in [t for t, s in _sessions.items() if t != mine and not s["local"]]:
+        gone = _sessions.pop(t, None)
+        _trusted.pop((gone or {}).get("dev", ""), None)
         n += 1
+    _save_trust()
     _save()
     return {"ok": True, "revoked": n}
