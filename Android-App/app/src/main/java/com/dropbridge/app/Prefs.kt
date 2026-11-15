@@ -113,6 +113,11 @@ object Prefs {
         recentTargets = (listOf(p) + recentTargets.filter { !it.equals(p, ignoreCase = true) }).take(8)
     }
 
+    /** Tab Hubungkan: tampilkan Daftar (true) atau Peta tata surya (false). */
+    var hubList: Boolean
+        get() = get("hubList") == "1"
+        set(v) = put("hubList", if (v) "1" else "0")
+
     /** Daftar folder di PC (disimpan terakhir kali berhasil diambil) untuk saran nama. */
     var folders: List<String>
         get() = get("folders").split("\n").filter { it.isNotEmpty() }

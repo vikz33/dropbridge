@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from . import events
 from .config import save_setting, settings
-from .netinfo import all_ips
+from .netinfo import all_ips, is_tailscale
 
 COOKIE = "db_token"
 MAX_FAILS = 5
@@ -350,6 +350,7 @@ def _public(token: str, s: dict, mine: str | None, now: float) -> dict:
         "current": token == mine,
         "local": s["local"],
         "app": _app_version(s["ua"]),  # versi aplikasi Android ("" = lewat browser)
+        "tailscale": is_tailscale(s["ip"]),  # tersambung lewat internet (orbit putus-putus di peta)
         "role": s.get("role", "full"),
         "pending": s.get("status") == "pending",
         "wait": max(0, int(PENDING_SECONDS - (now - s["created"]))) if s.get("status") == "pending" else 0,
@@ -380,6 +381,15 @@ def devices(request: Request):
         "phones": sum(1 for d in ok if d["online"] and not d["local"]),  # HP/perangkat lain, tanpa PC ini
         "pending": [d for d in items if d["pending"]],
     }
+
+
+@router.get("/peers", dependencies=[Depends(require_auth)])
+def peers(request: Request, fresh: int = 0):
+    """Laptop DropBridge lain di Wi-Fi ini, untuk peta Hubungkan (orbit luar)."""
+    from .discovery import peers as find
+    if not _current(request)["local"] and _current(request).get("role") != "full":
+        return {"peers": []}
+    return {"peers": find(0 if fresh else 15)}
 
 
 @router.get("/devices/pending", dependencies=[Depends(require_auth)])

@@ -50,6 +50,19 @@ yang sudah terhubung tidak berbeda.
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
 
+## Hubungkan sebagai tata surya (PC 3.1.0 · Android 3.1.0)
+
+- **Laptop dan browser**: matahari = laptop. Orbit dalam = perangkat aktif sekarang, tengah = pernah tersambung,
+  luar = menunggu izin atau laptop DropBridge lain di Wi-Fi ini, putus-putus = lewat internet (Tailscale).
+  Warna: putih = laptop (lencana W/L), teal = aplikasi Android, abu = browser, kuning = menunggu izin,
+  cincin = hanya kirim. Ketuk planet untuk detail: ubah hak, putuskan, izinkan/tolak, atau buka laptop lain.
+- **Aplikasi Android**: matahari = HP ini, planet = laptop (tersimpan, di Wi-Fi ini, atau baru). Ketuk untuk
+  "Jadikan tujuan kirim", "Buka File di PC ini", atau "Lupakan PC". Cari ulang tiap 20 detik saat terbuka.
+- Tombol **Peta / Daftar** selalu ada. Peta berputar pelan (60-200 detik per putaran) dan berhenti saat tidak
+  terlihat, saat "kurangi gerak"/animasi HP dimatikan, mode hemat baterai, atau baterai laptop di bawah 20%.
+- Permintaan izin HP baru muncul sekali sebagai jendela; setelah itu bisa dijawab dari kartu di samping peta.
+- Laptop lain dicari lewat siaran UDP yang sama dengan pencarian HP (`GET /api/peers`, disimpan 15 detik).
+
 ## Cara pakai
 
 **Pemakaian sehari-hari (versi terpasang):** pasang `DropBridge-Setup-<versi>.exe`, lalu buka **DropBridge** dari

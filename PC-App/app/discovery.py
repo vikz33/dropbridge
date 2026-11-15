@@ -36,5 +36,61 @@ def _serve(http_port: int) -> None:
             continue
 
 
+_peers_cache: tuple[float, list[dict]] = (0.0, [])
+_peers_lock = threading.Lock()
+
+
+def peers(max_age: float = 15.0) -> list[dict]:
+    """Laptop DropBridge lain di Wi-Fi ini (siaran UDP yang sama dengan pencarian HP, ±1 detik).
+
+    Untuk peta Hubungkan. Hasil disimpan sebentar supaya halaman yang dimuat ulang tidak menyiarkan terus.
+    """
+    import time
+    from .config import settings
+    from .netinfo import lan_ips
+    global _peers_cache
+    with _peers_lock:
+        if time.time() - _peers_cache[0] < max_age:
+            return list(_peers_cache[1])
+        found: dict[str, dict] = {}
+        targets = {"255.255.255.255"}
+        for ip in lan_ips():
+            parts = ip.split(".")
+            if len(parts) == 4:
+                targets.add(".".join(parts[:3] + ["255"]))  # anggap /24, jaringan rumah/kantor umumnya begitu
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.settimeout(0.25)
+        except OSError:
+            return []
+        try:
+            for _round in range(2):
+                for t in targets:
+                    try:
+                        sock.sendto(b"DROPBRIDGE?", (t, DISCOVERY_PORT))
+                    except OSError:
+                        pass
+                end = time.time() + 0.5
+                while time.time() < end:
+                    try:
+                        data, addr = sock.recvfrom(1024)
+                    except OSError:
+                        continue
+                    try:
+                        j = json.loads(data.decode("utf-8", "replace"))
+                    except ValueError:
+                        continue
+                    if j.get("name") != "DropBridge" or j.get("id") == settings.pc_id:
+                        continue  # bukan DropBridge, atau laptop ini sendiri
+                    key = j.get("id") or addr[0]
+                    found[key] = {"id": j.get("id", ""), "name": j.get("host", ""), "os": j.get("os", ""),
+                                  "version": j.get("version", ""), "url": f"http://{addr[0]}:{j.get('port', 8000)}"}
+        finally:
+            sock.close()
+        _peers_cache = (time.time(), list(found.values()))
+        return list(found.values())
+
+
 def start(http_port: int, lan_only: bool = True) -> None:
     threading.Thread(target=_serve, args=(http_port,), daemon=True).start()

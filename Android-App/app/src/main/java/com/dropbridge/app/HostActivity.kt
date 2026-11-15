@@ -76,6 +76,7 @@ class HostActivity : Activity() {
     private lateinit var recvCount: TextView
     private lateinit var recvList: LinearLayout
     private lateinit var addBtn: View
+    private lateinit var orbit: OrbitMap
     private lateinit var pcRow: LinearLayout
     private lateinit var pcView: TextView
     private var listSig = ""
@@ -108,6 +109,10 @@ class HostActivity : Activity() {
         scr = Ui.screen(this, "Hubungkan", null, back = false, nav = Ui.TAB_HOST)
         builtDark = Ui.dark
         val col = scr.content
+
+        // ---------- Peta tata surya: HP ini di tengah, laptop sebagai planet ----------
+        orbit = OrbitMap(this) { refresh() }
+        col.addView(orbit.root, Ui.lp(c, b = 16))
 
         // ---------- Laptop tujuan (dulu di Pengaturan): status, Ganti, isi manual ----------
         col.addView(Ui.caption(c, "Laptop").apply { setPadding(Ui.dp(c, 6), 0, 0, Ui.dp(c, 6)) })
@@ -448,6 +453,7 @@ class HostActivity : Activity() {
     }
 
     private fun refresh() {
+        if (::orbit.isInitialized) orbit.tick()
         val srv = Host.server
         updating = true
         toggle.isChecked = srv != null
@@ -558,10 +564,12 @@ class HostActivity : Activity() {
         super.onResume()
         if (Ui.themeStale(this, builtDark)) { recreate(); return }
         handler.post(ticker)
+        orbit.start()
     }
 
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(ticker)
+        orbit.stop()  // peta berhenti berputar saat layar tidak terlihat
     }
 }

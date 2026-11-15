@@ -468,7 +468,8 @@
       renderHome();
     } else if (route.type === 'more') {
       $('#qrOff').hidden = !!urls.length;
-      renderDevices();
+      hubSig = '';
+      loadHub(true).catch(() => {});
       loadInfo();
     } else if (route.type === 'send') {
       if (isOnPc && myRole === 'full') loadIncoming().catch(() => {});
@@ -1629,7 +1630,7 @@
       const jobs = [loadFolders()];
       if (myRole === 'full' && $('#textDlg').open) jobs.push(loadClips());
       if (inFolder() && myRole === 'full') jobs.push(loadFiles());
-      if (route.type === 'more') jobs.push(renderDevices());
+      if (route.type === 'more') jobs.push(loadHub());
       if (isOnPc && myRole === 'full') jobs.push(loadIncoming());
       await Promise.all(jobs);
       setOnline(true);
@@ -1829,11 +1830,220 @@
     } catch (err) { box.textContent = err.message; }
   }
 
+  // ---------- Hubungkan: peta tata surya ----------
+  // Matahari = laptop (server yang dipakai semua perangkat). Orbit dalam = aktif sekarang, tengah = pernah
+  // tersambung, luar = menunggu izin atau laptop lain di Wi-Fi ini, putus-putus = lewat Tailscale.
+  // Berputar pelan (60-200 dtk per putaran) dan berhenti saat halaman tidak terlihat, "kurangi gerak", atau baterai lemah.
+  let hubDevs = [];
+  let hubPeers = [];
+  let peersAt = 0;
+  let hubSel = '';
+  let hubSig = '';
+  let hubView = store.get('db_hubview') === 'list' ? 'list' : 'map';
+  const RING_T = [70, 110, 160, 200];
+  const IC_PLANET = {
+    lap: '<rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>',
+    app: '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>',
+    web: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
+  };
+  const planetIcon = (k, s) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC_PLANET[k]}</svg>`;
+  const osBadge = (os) => (/windows/i.test(os) ? 'W' : /linux|mint|ubuntu/i.test(os) ? 'L' : /mac/i.test(os) ? 'M' : '');
+
+  async function loadHub(force = false) {
+    const d = await api('/api/devices');
+    devInfo = d;
+    hubDevs = d.devices || [];
+    if (force || Date.now() - peersAt > 15000) {
+      peersAt = Date.now();
+      try { hubPeers = (await api('/api/peers' + (force ? '?fresh=1' : ''))).peers || []; } catch { /* lama: tanpa laptop lain */ }
+    }
+    renderHub();
+    if (hubView === 'list') renderDevices();
+  }
+
+  function hubPlanets() {
+    const out = [];
+    for (const v of hubDevs) {
+      if (v.local) continue; // laptop ini sendiri = matahari
+      const kind = v.pending ? 'pend' : v.app ? 'app' : 'web';
+      const ring = v.pending ? 2 : v.online && v.tailscale ? 3 : v.online ? 0 : 1;
+      const sub = v.pending ? 'Menunggu izin · ' + mmss(v.wait || 0)
+        : (v.app ? 'Aplikasi ' + v.app : 'Browser') + ' · ' + (v.current ? 'HP ini' : v.online ? (v.tailscale ? 'lewat internet' : 'aktif') : ago(v.last_seen));
+      out.push({ id: 'd' + v.id, dev: v, kind, ring, name: v.name, sub, ringRole: v.role === 'send' && !v.pending, dim: !v.online && !v.pending, badge: v.tailscale ? '↗' : '' });
+    }
+    for (const p of hubPeers) {
+      out.push({ id: 'p' + (p.id || p.url), peer: p, kind: 'lap', ring: 2, name: p.name || p.url.replace('http://', ''), sub: (p.os || 'Laptop') + ' · Wi-Fi ini', badge: osBadge(p.os) });
+    }
+    return out;
+  }
+
+  function renderHub() {
+    const planets = hubPlanets();
+    const active = planets.filter((p) => p.ring === 0 || p.ring === 3).length;
+    const pend = planets.filter((p) => p.kind === 'pend').length;
+    $('#hubSum').textContent = [
+      window.innerWidth < 520 ? 'Pusat: ' + (pcInfo.name || pcLabel()) + (isOnPc ? ' (laptop ini)' : ' (tujuan)') : '',
+      active ? `${active} perangkat aktif` : 'Belum ada perangkat aktif',
+      pend ? `${pend} menunggu izin` : '',
+      hubPeers.length ? `${hubPeers.length} laptop lain di Wi-Fi ini` : '',
+    ].filter(Boolean).join(' · ');
+    $('#hvMap').setAttribute('aria-pressed', String(hubView === 'map'));
+    $('#hvList').setAttribute('aria-pressed', String(hubView === 'list'));
+    $('#hubMap').hidden = hubView !== 'map';
+    $('#hubList').hidden = hubView !== 'list';
+    renderPendingCards();
+    if (hubSel && !planets.some((p) => p.id === hubSel) && hubSel !== 'sun') { hubSel = ''; }
+    renderDetail(planets);
+    if (hubView !== 'map') return;
+    const box = $('#hubMap');
+    const W = box.clientWidth || 600;
+    const H = Math.round(Math.min(W, window.innerWidth >= 960 ? 640 : W * 1.02));
+    const sig = JSON.stringify([W, H, hubSel, planets.map((p) => [p.id, p.ring, p.name, p.sub.replace(/\d+:\d+/, ''), p.ringRole, p.dim, p.kind]), pcInfo.name]);
+    if (sig === hubSig) {
+      // Hanya hitung mundur izin yang berubah: perbarui teksnya tanpa menggambar ulang (animasi tidak terulang)
+      for (const p of planets) { const n = box.querySelector(`[data-pid="${CSS.escape(p.id)}"] small`); if (n) n.textContent = p.sub; }
+      return;
+    }
+    hubSig = sig;
+    box.style.height = H + 'px';
+    const big = W >= 520;
+    const sunPx = big ? 92 : 60;
+    // Orbit dimulai di luar matahari (dan labelnya), berakhir dekat tepi peta
+    const R = Math.min(W, H) / 2 - (big ? 64 : 30);
+    const inner = sunPx / 2 + (big ? 56 : 34);
+    const radius = (i) => inner + (R - inner) * [0, 0.38, 0.72, 1][i];
+    const used = new Set(planets.map((p) => p.ring));
+    used.add(0);
+    const nodes = [];
+    for (let i = 0; i < 4; i++) {
+      if (!used.has(i)) continue;
+      nodes.push(el('span', { class: 'orbit' + (i === 3 ? ' dash' : ''), style: `width:${2 * radius(i)}px;height:${2 * radius(i)}px` }));
+    }
+    const sun = el('button', { type: 'button', class: 'sun' + (hubSel === 'sun' ? ' sel' : ''), 'aria-label': (isOnPc ? 'Laptop ini' : 'Laptop tujuan') + ', tambah perangkat', onclick: () => selectPlanet('sun') });
+    sun.innerHTML = `<span class="core" style="width:${sunPx}px;height:${sunPx}px">${planetIcon('lap', big ? 40 : 28)}</span>`;
+    // Di layar kecil label matahari ada di atas peta (hubSum), supaya tidak tertimpa planet
+    if (big) sun.append(el('span', { class: 'lbl' }, pcInfo.name || pcLabel(), el('small', { text: (pcInfo.os ? pcInfo.os + ' · ' : '') + (isOnPc ? 'laptop ini' : 'tujuan') })));
+    nodes.push(sun);
+    for (let ring = 0; ring < 4; ring++) {
+      const list = planets.filter((p) => p.ring === ring).sort((a, b) => a.id.localeCompare(b.id));
+      list.forEach((p, i) => {
+        const ang = (360 / list.length) * i + ring * 47 + 20;
+        const size = Math.round((big ? 58 : 44) - ring * (big ? 4 : 3));
+        const r = radius(ring);
+        const ball = el('span', { class: `ball ${p.kind}` + (p.ringRole ? ' ring' : '') + (hubSel === p.id ? ' sel' : ''), style: `width:${size}px;height:${size}px` });
+        ball.innerHTML = planetIcon(p.kind === 'pend' ? 'app' : p.kind, Math.round(size * 0.46));
+        if (p.badge) ball.append(el('span', { class: 'badge ' + (p.badge === '↗' ? 'ts' : 'os'), text: p.badge }));
+        const pl = el('button', {
+          type: 'button', class: 'pl' + (p.dim ? ' dim' : ''), role: 'listitem', 'data-pid': p.id,
+          'aria-label': `${p.name}, ${p.sub}`, onclick: () => selectPlanet(p.id),
+        }, ball, el('span', { class: 'lbl' }, p.name, el('small', { text: p.sub })));
+        nodes.push(el('div', { class: 'spin', style: `--t:${RING_T[ring]}s;--a:${ang}deg` },
+          el('div', { class: 'arm', style: `left:${r}px` }, pl)));
+      });
+    }
+    if (!planets.length) {
+      nodes.push(el('p', { class: 'space-empty', text: 'Belum ada HP yang terhubung. Scan QR di "Tambah perangkat".' }));
+    }
+    box.replaceChildren(...nodes);
+    syncMotion();
+  }
+
+  // Gerak berhenti saat halaman tak terlihat atau baterai lemah (kurangi gerak diatur CSS)
+  let lowBattery = false;
+  function syncMotion() { $('#hubMap').classList.toggle('still', document.hidden || lowBattery || route.type !== 'more'); }
+  document.addEventListener('visibilitychange', syncMotion);
+  try {
+    if (navigator.getBattery) navigator.getBattery().then((b) => {
+      const upd = () => { lowBattery = !b.charging && b.level < 0.2; syncMotion(); };
+      b.addEventListener('levelchange', upd); b.addEventListener('chargingchange', upd); upd();
+    }).catch(() => {});
+  } catch { /* tanpa info baterai */ }
+  window.addEventListener('resize', () => { if (route.type === 'more') { hubSig = ''; renderHub(); } });
+
+  function selectPlanet(id) {
+    hubSel = hubSel === id && window.innerWidth >= 960 ? '' : id;
+    hubSig = '';
+    renderHub();
+    if (window.innerWidth < 960 && hubSel) {
+      if (hubSel === 'sun') { hubSel = ''; $('.add-card').scrollIntoView({ behavior: 'smooth', block: 'start' }); renderHub(); return; }
+      $('#planetDlg').showModal();
+    }
+  }
+  $('#planetClose').addEventListener('click', () => $('#planetDlg').close());
+  $('#planetDlg').addEventListener('click', (e) => { if (e.target.id === 'planetDlg') e.target.close(); });
+  $('#planetDlg').addEventListener('close', () => { hubSel = ''; hubSig = ''; if (route.type === 'more') renderHub(); });
+  $('#hvMap').addEventListener('click', () => { hubView = 'map'; store.set('db_hubview', 'map'); hubSig = ''; renderHub(); });
+  $('#hvList').addEventListener('click', () => { hubView = 'list'; store.set('db_hubview', 'list'); renderHub(); renderDevices(); });
+
+  async function changeRole(v) {
+    const to = v.role === 'full' ? 'send' : 'full';
+    if (!confirm(`Ubah hak ${v.name} menjadi "${roleName(to)}"?`)) return;
+    try { await api('/api/devices/' + v.id + '/role', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ role: to }) }); toast('Hak diubah: ' + roleName(to)); loadHub(); }
+    catch (err) { toast(err.message, 'err'); }
+  }
+  async function disconnect(v) {
+    if (!confirm(`Putuskan ${v.name}? Untuk terhubung lagi, HP itu perlu PIN dan izin dari laptop ini.`)) return;
+    try { await api('/api/devices/' + v.id, { method: 'DELETE' }); toast('Perangkat diputuskan'); hubSel = ''; if ($('#planetDlg').open) $('#planetDlg').close(); loadHub(); updateDevCount(); }
+    catch (err) { toast(err.message, 'err'); }
+  }
+
+  // Isi detail planet terpilih: panel kanan (laptop) atau lembar bawah (HP)
+  function detailNodes(p) {
+    const head = (kind, name, sub, chip) => el('div', { class: 'hd-head' },
+      (() => { const b = el('span', { class: 'ball ' + kind, style: 'width:48px;height:48px' }); b.innerHTML = planetIcon(kind === 'pend' ? 'app' : kind, 22); return b; })(),
+      el('span', { class: 'hd-tx' }, el('b', { text: name }), el('small', { class: 'muted', text: sub })),
+      chip || '');
+    if (p.peer) {
+      const x = p.peer;
+      return [head('lap', p.name, [x.os, x.url.replace('http://', ''), x.version ? 'PC ' + x.version : ''].filter(Boolean).join(' · ')),
+        el('p', { class: 'muted small', text: 'Laptop lain dengan DropBridge di Wi-Fi ini. Buka halamannya untuk mengirim file ke sana (perlu PIN laptop itu).' }),
+        el('div', { class: 'hd-acts one' }, el('a', { class: 'btn primary', href: x.url, target: '_blank', rel: 'noopener', text: 'Buka ' + p.name }))];
+    }
+    const v = p.dev;
+    const sub = [v.app ? 'Aplikasi ' + v.app : v.kind, v.ip, v.pending ? 'menunggu izin' : v.online ? (v.tailscale ? 'lewat internet' : 'aktif sekarang') : ago(v.last_seen)].join(' · ');
+    const nodes = [head(p.kind, v.name + (v.current ? ' (HP ini)' : ''), sub, v.pending ? '' : el('span', { class: 'role-chip ' + v.role, text: roleName(v.role) }))];
+    if (appOld(v.app)) nodes.push(el('p', { class: 'dev-old-note', text: `Versi lama. Perbarui ke ${android.version} lewat kartu Aplikasi Android.` }));
+    if (myLocal && v.pending) {
+      nodes.push(el('div', { class: 'hd-acts' },
+        el('button', { class: 'btn', type: 'button', text: 'Tolak', onclick: () => answer(v, false) }),
+        el('button', { class: 'btn primary', type: 'button', text: 'Izinkan…', onclick: () => { if ($('#planetDlg').open) $('#planetDlg').close(); openApprove(v); } })));
+    } else if (myLocal) {
+      nodes.push(el('div', { class: 'hd-acts' },
+        el('button', { class: 'btn', type: 'button', text: v.role === 'full' ? 'Jadikan Hanya kirim' : 'Beri akses Penuh', onclick: () => changeRole(v) }),
+        el('button', { class: 'btn danger', type: 'button', text: 'Putuskan', onclick: () => disconnect(v) })));
+    } else if (!v.current) {
+      nodes.push(el('p', { class: 'muted small', text: 'Hak dan pemutusan perangkat diatur dari laptop.' }));
+    }
+    return nodes;
+  }
+
+  function renderDetail(planets) {
+    const p = planets.find((x) => x.id === hubSel);
+    const box = $('#hubDetail');
+    box.hidden = !p;
+    if (!p) { if ($('#planetDlg').open && hubSel !== 'sun') $('#planetDlg').close(); return; }
+    box.replaceChildren(...detailNodes(p));
+    $('#planetTitle').textContent = p.peer ? 'Laptop' : p.dev.pending ? 'Menunggu izin' : 'Perangkat';
+    $('#planetBody').replaceChildren(...detailNodes(p));
+  }
+
+  // Kartu "ingin terhubung" di samping peta (hanya laptop ini yang bisa menjawab)
+  function renderPendingCards() {
+    const box = $('#hubPending');
+    const list = myLocal ? hubDevs.filter((v) => v.pending) : [];
+    box.replaceChildren(...list.map((v) => el('section', { class: 'card pend-card' },
+      (() => { const b = el('span', { class: 'ball pend', style: 'width:44px;height:44px' }); b.innerHTML = planetIcon('app', 20); return b; })(),
+      el('span', { class: 'hd-tx' }, el('b', { text: v.name + ' ingin terhubung' }), el('small', { class: 'muted', text: 'PIN benar · otomatis ditolak ' + mmss(v.wait || 0) })),
+      el('button', { class: 'btn small', type: 'button', text: 'Tolak', onclick: () => answer(v, false) }),
+      el('button', { class: 'btn small primary', type: 'button', text: 'Izinkan…', onclick: () => openApprove(v) }))));
+  }
+
   // ---------- Izin HP baru (hanya di PC ini) ----------
   let apDev = null;
   let apRole = 'send';
   let apTimer = 0;
   let pendingTimer = 0;
+  const apShown = new Set();
   const mmss = (n) => Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
 
   function startPendingWatch() {
@@ -1843,9 +2053,10 @@
       try {
         const d = await api('/api/devices/pending');
         const next = (d.pending || [])[0];
-        if (next && !$('#approveDlg').open) openApprove(next);
+        // Munculkan sekali per permintaan; kalau ditutup, jawab lewat kartu di Hubungkan
+        if (next && !$('#approveDlg').open && !apShown.has(next.id)) { apShown.add(next.id); openApprove(next); }
         if (!next && $('#approveDlg').open) $('#approveDlg').close();
-        if (next || route.type === 'more') { if (route.type === 'more') renderDevices(); }
+        if (route.type === 'more') loadHub().catch(() => {});
       } catch { /* abaikan */ }
     };
     tick();
@@ -1884,7 +2095,7 @@
     if ($('#approveDlg').open) $('#approveDlg').close();
     apDev = null;
     updateDevCount();
-    if (route.type === 'more') renderDevices();
+    if (route.type === 'more') loadHub().catch(() => {});
   }
   $('#apAllow').addEventListener('click', () => { if (apDev) answer(apDev, true); });
   $('#apReject').addEventListener('click', () => { if (apDev) answer(apDev, false); });
@@ -1908,7 +2119,7 @@
   $('#renameBtn').addEventListener('click', openName);
   $('#devOthers').addEventListener('click', async () => {
     if (!confirm('Putuskan semua HP? Untuk terhubung lagi, mereka perlu PIN dan izin dari laptop ini.')) return;
-    try { const r = await api('/api/devices/revoke-others', { method: 'POST' }); toast(r.revoked + ' perangkat diputuskan'); renderDevices(); updateDevCount(); }
+    try { const r = await api('/api/devices/revoke-others', { method: 'POST' }); toast(r.revoked + ' perangkat diputuskan'); loadHub().catch(() => {}); updateDevCount(); }
     catch (err) { toast(err.message, 'err'); }
   });
   setInterval(() => { if (loggedIn && !document.hidden) updateDevCount(); }, 15000);

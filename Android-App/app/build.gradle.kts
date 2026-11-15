@@ -11,8 +11,8 @@ android {
         applicationId = "com.dropbridge.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 30000
-        versionName = "3.0.0"
+        versionCode = 30100
+        versionName = "3.1.0"
     }
 
     buildTypes {

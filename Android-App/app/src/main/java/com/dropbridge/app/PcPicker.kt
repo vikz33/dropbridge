@@ -43,7 +43,7 @@ object PcPicker {
         val btns = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
         val again = Ui.button(c, "Cari ulang", Ui.Kind.OUTLINE, 50) {}
         val manual = Ui.button(c, "Isi manual", Ui.Kind.OUTLINE, 50) {
-            d.dismiss(); act.startActivity(Intent(act, MoreActivity::class.java))
+            d.dismiss(); Ui.goTab(act, Ui.TAB_HOST)  // PIN + alamat manual ada di Hubungkan › Laptop
         }
         btns.addView(again, Ui.lp(c, 0, Ui.WRAP, r = 5, weight = 1f))
         btns.addView(manual, Ui.lp(c, 0, Ui.WRAP, l = 5, weight = 1f))
@@ -153,7 +153,7 @@ object PcPicker {
     }
 
     /** PC baru: masukkan PIN yang tampil di layar laptop itu. */
-    private fun askPin(act: Activity, f: Net.Found, done: () -> Unit) {
+    fun askPin(act: Activity, f: Net.Found, done: () -> Unit) {
         val c: Context = act
         val box = EditText(c).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; setSingleLine() }
         Ui.styleInput(c, box, "PIN, mis. 638334")
@@ -161,7 +161,7 @@ object PcPicker {
         val wrap = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(c, 20), Ui.dp(c, 4), Ui.dp(c, 20), 0)
-            addView(Ui.text(c, "PIN tampil di layar DropBridge $name (menu Hubungkan).", 13f, false, Ui.MUTED), Ui.lp(c, b = 10))
+            addView(Ui.text(c, "PIN ada di DropBridge $name › Pengaturan › PIN.", 13f, false, Ui.MUTED), Ui.lp(c, b = 10))
             addView(box, LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP))
         }
         val dlg = AlertDialog.Builder(act).setTitle("Hubungkan $name").setView(wrap)
