@@ -396,6 +396,12 @@ class Desktop:
             except Exception:
                 webbrowser.open(settings.shared_dir.as_uri())
 
+        def bg(fn):
+            """Linux: menu ikon panel dijalankan di putaran GTK; tugas yang menunggu (dialog, berhenti) dipindah ke thread."""
+            if os.name == "nt":
+                return fn
+            return lambda icon, item: threading.Thread(target=fn, args=(icon, item), daemon=True).start()
+
         def to_onedrive(icon, item):
             od = storage_admin.onedrive_work()
             if od:
@@ -428,9 +434,9 @@ class Desktop:
                 "Folder penyimpanan",
                 pystray.Menu(
                     pystray.MenuItem(lambda item: f"Sekarang: {short(settings.shared_dir)}", None, enabled=False),
-                    pystray.MenuItem("Simpan di OneDrive kantor (folder DropBridge)", to_onedrive,
+                    pystray.MenuItem("Simpan di OneDrive kantor (folder DropBridge)", bg(to_onedrive),
                                      visible=storage_admin.onedrive_work() is not None),
-                    pystray.MenuItem("Pilih folder lain…", choose),
+                    pystray.MenuItem("Pilih folder lain…", bg(choose)),
                 ),
             ),
             pystray.MenuItem(f"PIN: {settings.pin}", None, enabled=False),
@@ -439,7 +445,7 @@ class Desktop:
             pystray.MenuItem("Mulai otomatis saat " + ("Windows" if os.name == "nt" else "laptop") + " menyala",
                              toggle_autostart, checked=lambda item: autostart_on()),
             pystray.MenuItem("Notifikasi saat file masuk", toggle_notify, checked=lambda item: settings.notify),
-            pystray.MenuItem("Berhenti", quit_all),
+            pystray.MenuItem("Berhenti", bg(quit_all)),
         )
         return pystray.Icon("DropBridge", icon_image(), f"DropBridge {VERSION}", menu)
 
@@ -474,22 +480,35 @@ class Desktop:
         migrate_old_autostart()
 
         try:
-            import pystray  # noqa: F401
-            self.icon = self.build_tray()
-            threading.Thread(target=self.icon.run, daemon=True).start()
-        except Exception:
-            traceback.print_exc()
-
-        try:
             import webview
         except Exception:
             traceback.print_exc()
             webview = None
 
+        # Linux (GTK): ikon panel harus ikut putaran GTK milik jendela, bukan putaran sendiri di thread lain.
+        # Kalau tidak, GTK menolak membuka jendela ("cannot acquire the default main context").
+        detached = os.name != "nt" and webview is not None
+        try:
+            import pystray  # noqa: F401
+            self.icon = self.build_tray()
+            if detached:
+                self.icon.run_detached()
+            elif webview is not None:
+                threading.Thread(target=self.icon.run, daemon=True).start()
+        except Exception:
+            traceback.print_exc()
+            detached = False
+
         if webview is None:
             # Tanpa pywebview (mis. saat mengembangkan): buka di browser seperti dulu, tray tetap ada
             if not START_HIDDEN:
                 webbrowser.open(f"http://localhost:{settings.port}/" + ("#/selamat-datang" if welcome_due() else ""))
+            if self.icon is not None:
+                try:
+                    self.icon.run()  # ikon tray di thread utama sampai Berhenti
+                    return
+                except Exception:
+                    traceback.print_exc()
             while not self.quitting:
                 time.sleep(0.5)
             return

@@ -1,2 +1,2 @@
 """Versi DropBridge PC. Naikkan setiap rilis; aplikasi Android memakai nomor yang sama."""
-VERSION = "2.5.1"
+VERSION = "2.5.2"
