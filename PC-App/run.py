@@ -34,4 +34,4 @@ def banner() -> None:
 
 if __name__ == "__main__":
     banner()
-    uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning")
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning", ws="none", http="h11", loop="asyncio")  # tanpa WebSocket

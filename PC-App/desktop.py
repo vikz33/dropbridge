@@ -82,7 +82,7 @@ try:
     from app.version import VERSION
 except Exception:
     traceback.print_exc()
-    message("DropBridge gagal dimulai: ada berkas yang kurang.\n\nDetail di data\\server.log")
+    message("DropBridge gagal dimulai: ada berkas yang kurang.\n\nDetail di " + str(globals().get("_LOG", "server.log")))
     sys.exit(1)
 
 START_HIDDEN = "--tray" in sys.argv
@@ -105,7 +105,10 @@ class Server:
     """uvicorn di thread terpisah supaya jendela dan ikon tray tetap responsif."""
 
     def __init__(self) -> None:
-        cfg = uvicorn.Config(app, host=settings.host, port=settings.port, log_level="warning")
+        # ws="none": DropBridge tidak memakai WebSocket. Di Linux, paket websockets versi lama milik sistem
+        # (lewat --system-site-packages) membuat uvicorn gagal jalan bila dideteksi otomatis.
+        cfg = uvicorn.Config(app, host=settings.host, port=settings.port, log_level="warning",
+                             ws="none", http="h11", loop="asyncio")
         self.srv = uvicorn.Server(cfg)
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.error = ""
@@ -463,7 +466,7 @@ class Desktop:
         print(f"DropBridge {VERSION} aktif di {LOCAL} · PIN {settings.pin} · folder {settings.shared_dir}", flush=True)
         time.sleep(1.0)
         if self.server.error or not self.server.thread.is_alive():
-            message(f"Server gagal jalan (port {settings.port} dipakai program lain?).\n\nDetail di data\\server.log")
+            message(f"Server DropBridge gagal jalan.\n\nDetail di {USER_DIR / 'data' / 'server.log'}")
             return
         events.on("file", self.on_file)
         events.on("show", lambda route: self.show(route or None))
