@@ -105,6 +105,16 @@ def storage_open(body: OpenIn):
     return {"ok": True}
 
 
+@router.post("/storage/open-data", dependencies=[Depends(_pc_only)])
+def storage_open_data():
+    """Buka folder data & catatan (server.log) DropBridge, untuk dikirim bila ada masalah."""
+    try:
+        storage_admin.open_path(settings.data_dir)
+    except StorageError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
+
+
 # ---------- Selamat datang dan notifikasi ----------
 @router.post("/welcomed", dependencies=[Depends(_pc_only)])
 def welcomed():

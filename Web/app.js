@@ -44,6 +44,7 @@
   let via = 'lan';
   let online = true;
   let devInfo = { online: 0, devices: [] };
+  let pcInfo = { version: '', os: '', name: '', url: '' };
 
   // ---------- Util ----------
   const fmtSize = (b) => {
@@ -108,13 +109,26 @@
     return s.slice(i) === l.slice(i + 1);
   }
 
+  // Tujuan "Tanpa folder" (langsung di folder penyimpanan) ditulis apa adanya di kotak folder
+  const ROOT_LABEL = 'Tanpa folder';
+  const isRootLabel = (s) => s.trim().toLowerCase() === ROOT_LABEL.toLowerCase();
   const findFolder = (name) => folders.find((f) => f.name.toLowerCase() === name.toLowerCase());
 
-  function toast(msg, type = '') {
-    const t = el('div', { class: 'toast ' + type, text: msg });
-    $('#toasts').append(t);
-    setTimeout(() => t.classList.add('out'), 2600);
-    setTimeout(() => t.remove(), 3000);
+  // action: { label, onclick } mis. "Urungkan" setelah menghapus; tampil 4 detik
+  function toast(msg, type = '', action = null) {
+    const t = el('div', { class: 'toast ' + type }, el('span', { text: msg }));
+    const ms = action ? 4000 : 2600;
+    if (action) {
+      t.classList.add('has-act');
+      t.append(el('button', { type: 'button', class: 'toast-act', text: action.label, onclick: () => { t.remove(); action.onclick(); } }));
+    }
+    // Saat lembar/dialog terbuka, toast harus di dalamnya supaya tampil dan bisa diketuk (lapisan atas)
+    const box = $('#toasts');
+    const top = $$('dialog[open]').pop() || document.body;
+    if (box.parentElement !== top) top.append(box);
+    box.append(t);
+    setTimeout(() => t.classList.add('out'), ms);
+    setTimeout(() => t.remove(), ms + 400);
   }
 
   // Clipboard API butuh HTTPS; di http://192.168.x.x harus pakai cara lama.
@@ -179,6 +193,7 @@
     online = ok;
     $('#dot').classList.toggle('off', !ok);
     renderStatus();
+    renderRouteRow();
   }
 
   const pcLabel = () => (isOnPc ? 'PC ini' : (pcName || 'PC'));
@@ -277,21 +292,19 @@
       storageDir = d.storage_dir || '';
       android = d.android || android;
       welcomeDue = !!d.welcome;
-      $('#notifyRow').hidden = d.notify == null;
       if (d.notify != null) $('#notifyChk').checked = !!d.notify;
+      pcInfo = { version: d.version || '', os: d.os || '', name: d.pc_name || '', url: (d.urls || [])[0] || '' };
       renderStore();
       renderApk();
       // Versi terpasang yang baru dipasang/diperbarui: tampilkan Selamat datang sekali
       if (welcomeDue && isOnPc && !location.hash) location.hash = '#/selamat-datang';
-      $('#verLine').textContent = 'DropBridge PC versi ' + (d.version || '?') + (pcName ? ' · ' + pcName : '')
-        + (d.storage_dir ? '\nDisimpan di: ' + d.storage_dir : '');
       if (d.this_pc) isOnPc = true;
       if (d.pc_name) pcName = d.pc_name;
       maxMB = d.max_upload_mb || maxMB;
       if (typeof d.photo_max_kb === 'number') photoMaxKB = d.photo_max_kb;
-      $('#shrinkKB').textContent = photoMaxKB;
-      $('#shrinkRow').hidden = photoMaxKB <= 0;
       renderShrink();
+      renderRouteRow();
+      renderSettings();
       renderAddr();
       renderRemote();
       setTitle();
@@ -300,7 +313,7 @@
   }
 
   // ---------- Kotak nama folder (saran + petunjuk) ----------
-  function makeCombo(input, list, hintEl, { onInput } = {}) {
+  function makeCombo(input, list, hintEl, { onInput, tagEl } = {}) {
     let active = -1;
     let items = [];
 
@@ -317,6 +330,7 @@
     function openList() {
       const q = input.value.trim().toLowerCase();
       items = folders.filter((f) => !q || f.name.toLowerCase().includes(q)).slice(0, 8);
+      if (isRootLabel(input.value)) items = [];
       if (!items.length || (items.length === 1 && items[0].name.toLowerCase() === q)) { close(); return; }
       list.replaceChildren(...items.map((f, i) => el('li', {},
         el('button', {
@@ -333,37 +347,47 @@
       $$('button', list).forEach((b, i) => { b.style.background = i === active ? 'var(--bg)' : ''; });
     }
 
+    // Petunjuk singkat di kanan atas (tagEl: "Sudah ada", "Subfolder baru") + catatan di bawah kotak (hintEl)
     function updateHint() {
       hintEl.replaceChildren();
       hintEl.className = 'hint';
+      if (tagEl) { tagEl.textContent = ''; tagEl.className = 'folder-tag'; }
+      const tag = (short, long, cls) => {
+        if (tagEl) { tagEl.textContent = short; if (cls) tagEl.classList.add(cls); return; }
+        hintEl.prepend(el('div', { text: long }));
+        if (cls === 'ok') hintEl.classList.add('ok');
+      };
       const raw = input.value;
       if (!raw.trim()) return;
+      if (tagEl && isRootLabel(raw)) { tag('Langsung di penyimpanan', '', 'ok'); return; }
       const cleaned = cleanFolder(raw);
       if (!cleaned) { hintEl.classList.add('warn'); hintEl.textContent = 'Nama folder tidak valid.'; return; }
-      if (depthOf(cleaned) > MAX_DEPTH) { hintEl.classList.add('warn'); hintEl.textContent = `Paling banyak ${MAX_DEPTH} tingkat folder, mis. Kontainer/Pos/Tanggal.`; return; }
-      const parts = [];
+      if (depthOf(cleaned) > MAX_DEPTH) {
+        tag(`Maks. ${MAX_DEPTH} tingkat`, '', 'bad');
+        hintEl.classList.add('warn');
+        hintEl.textContent = `Paling banyak ${MAX_DEPTH} tingkat folder, mis. Kontainer/Pos/Tanggal.`;
+        return;
+      }
       const exist = findFolder(cleaned);
-      if (cleaned !== raw.trim() && cleaned !== raw.trim().replace(/\s*[\/\\]\s*/g, '/')) parts.push(el('div', { class: 'sub', text: 'Nama disesuaikan menjadi: ' + pathLabel(cleaned) }));
+      if (cleaned !== raw.trim() && cleaned !== raw.trim().replace(/\s*[\/\\]\s*/g, '/')) hintEl.append(el('div', { class: 'sub', text: 'Nama disesuaikan menjadi: ' + pathLabel(cleaned) }));
       if (exist) {
-        hintEl.classList.add('ok');
-        parts.unshift(el('div', { text: `Folder sudah ada · ${exist.count} file` }));
-      } else {
-        const par = parentOf(cleaned);
-        parts.unshift(el('div', { text: par
-          ? `Subfolder baru di ${pathLabel(findFolder(par) ? findFolder(par).name : par)}, dibuat saat file dikirim.`
-          : 'Folder baru, dibuat saat file dikirim.' }));
-        if (cleaned.length >= 4) {
-          const sim = folders.filter((f) => withinOneEdit(f.name, cleaned)).slice(0, 3);
-          if (sim.length) {
-            hintEl.classList.add('warn');
-            parts.push(el('div', {},
-              'Mirip dengan: ',
-              sim.map((f) => el('button', { type: 'button', class: 'link', text: pathLabel(f.name), onclick: () => choose(f.name) })),
-              ' — salah ketik?'));
-          }
+        tag('Sudah ada', `Folder sudah ada · ${exist.count} file`, 'ok');
+        return;
+      }
+      const par = parentOf(cleaned);
+      tag(par ? 'Subfolder baru' : 'Folder baru', par
+        ? `Subfolder baru di ${pathLabel(findFolder(par) ? findFolder(par).name : par)}, dibuat saat file dikirim.`
+        : 'Folder baru, dibuat saat file dikirim.');
+      if (cleaned.length >= 4) {
+        const sim = folders.filter((f) => withinOneEdit(f.name, cleaned)).slice(0, 3);
+        if (sim.length) {
+          hintEl.classList.add('warn', 'similar');
+          hintEl.append(el('div', {},
+            'Mirip dengan ',
+            sim.map((f) => el('button', { type: 'button', class: 'link', text: pathLabel(f.name), onclick: () => choose(f.name) })),
+            '. Salah ketik?'));
         }
       }
-      hintEl.append(...parts);
     }
 
     input.addEventListener('input', () => { openList(); updateHint(); if (onInput) onInput(); });
@@ -378,7 +402,7 @@
     return { updateHint, close };
   }
 
-  const sendCombo = makeCombo($('#folderInput'), $('#suggest'), $('#folderHint'));
+  const sendCombo = makeCombo($('#folderInput'), $('#suggest'), $('#folderHint'), { tagEl: $('#folderTag') });
   const moveCombo = makeCombo($('#moveInput'), $('#moveSuggest'), $('#moveHint'));
 
   function setTarget(name) {
@@ -447,7 +471,7 @@
       renderDevices();
       loadInfo();
     } else if (route.type === 'send') {
-      loadRecent().catch(() => {});
+      if (isOnPc && myRole === 'full') loadIncoming().catch(() => {});
     }
   }
 
@@ -464,7 +488,6 @@
     if (sig !== foldersSig) {
       foldersSig = sig;
       sendCombo.updateHint();
-      renderChips();
       if (route.type === 'home') renderHome();
       if (route.type === 'folder') { renderSubs(); renderMeta(); }
       if ($('#pickDlg').open) renderPick();
@@ -472,21 +495,12 @@
   }
 
 
-  const RECENT_CHIPS = 3;
-
-  function renderChips() {
-    const box = $('#recentChips');
-    box.replaceChildren();
-    const recent = folders.slice(0, RECENT_CHIPS);
-    box.hidden = !recent.length;
-    if (!recent.length) return;
-    box.append(el('span', { class: 'chips-label', text: 'Terakhir:' }));
-    for (const f of recent) {
-      box.append(el('button', {
-        type: 'button', class: 'chip', text: pathLabel(f.name), title: pathLabel(f.name),
-        onclick: () => { setTarget(f.name); store.set('db_target', f.name); },
-      }));
-    }
+  // Folder yang terakhir dipakai HP/laptop ini (paling baru di depan), untuk panel Pilih folder
+  const recentTargets = () => { try { return JSON.parse(store.get('db_recent') || '[]').filter((x) => typeof x === 'string'); } catch { return []; } };
+  function rememberTarget(p) {
+    if (!p) return;
+    const list = [p, ...recentTargets().filter((x) => x.toLowerCase() !== p.toLowerCase())].slice(0, 8);
+    store.set('db_recent', JSON.stringify(list));
   }
 
   // ---------- Ikon kecil ----------
@@ -521,6 +535,9 @@
     if (menuFrom === btn) { closeMenu(); return; }
     closeMenu();
     const m = $('#menu');
+    // Menu dari dalam dialog (mis. lembar Teks) harus ikut di dalam dialog supaya tampil di atasnya
+    const host = btn.closest('dialog') || document.body;
+    if (m.parentElement !== host) host.append(m);
     for (const it of items) {
       const node = el(it.href ? 'a' : 'button', {
         role: 'menuitem', class: 'mi' + (it.danger ? ' danger' : ''),
@@ -657,7 +674,7 @@
       el('a', { class: 'frow-main', href },
         el('span', { class: 'fic' }, svg(IC.folder)),
         el('span', { class: 'meta' },
-          el('span', { class: 'name', text: shown, title: pathLabel(f.name) }),
+          el('span', { class: 'name' + (!f.root && /\d{3}/.test(shown) ? ' code' : ''), text: shown, title: pathLabel(f.name) }),
           el('span', { class: 'sub', text: sub }))),
       dots);
   }
@@ -943,6 +960,7 @@
   function targetFolder() {
     const raw = $('#folderInput').value;
     if (!raw.trim()) return null;
+    if (isRootLabel(raw)) return '';
     return cleanFolder(raw) || null;
   }
 
@@ -983,7 +1001,7 @@
         fail(row, `Terlalu besar (maks ${maxMB} MB)`);
         continue;
       }
-      queue.push({ file, row, folder, shrink: $('#shrinkPhotos').checked });
+      queue.push({ file, row, folder, shrink: shrinkOn() });
       batch.total++;
     }
     syncUpCard();
@@ -1078,15 +1096,14 @@
     $('#upNote').hidden = true;
     renderSum();
     if (!queue.length) { batch.total = batch.done = 0; }
-    if (loggedIn) { refresh(); loadRecent().catch(() => {}); }
+    if (loggedIn) refresh();
   }
 
   function renderSum() {
     const busy = uploading || queue.length;
     const n = Math.min(batch.total, batch.done + (busy ? 1 : 0));
-    $('#upSum').textContent = busy && batch.total
-      ? `Mengirim ${n} dari ${batch.total} ke ${batch.folder || 'Tanpa folder'}`
-      : (batch.total ? `${batch.done} file selesai` : '');
+    $('#upSum').textContent = busy && batch.total ? `Mengirim ${n} dari ${batch.total}` : (batch.total ? `${batch.done} file selesai` : 'Pengiriman');
+    $('#upCount').textContent = batch.total ? 'ke ' + pathLabel(batch.folder || '') : '';
     $('#upSumBar').style.width = batch.total ? Math.round((batch.done / batch.total) * 100) + '%' : '0%';
     $('.sum-bar').hidden = !batch.total || batch.total < 2;
   }
@@ -1162,7 +1179,7 @@
             if (dupe) state.textContent = `Sudah ada di ${real || 'Tanpa folder'} (${d.saved[0].name}), tidak disimpan ulang`;
             else state.textContent = `Selesai · ${fmtSize(file.size)} · ${sec(now - t0)}` + (tSent && tSent - t0 > 300 ? ' · ' + fmtSpeed(file.size * 1000 / (tSent - t0)) : '');
             setTimeout(() => { row.remove(); syncUpCard(); }, 15000);
-            if (real) store.set('db_target', real);
+            if (real) { store.set('db_target', real); rememberTarget(real); }
             if (real && $('#folderInput').value.trim() && cleanFolder($('#folderInput').value).toLowerCase() === folder.toLowerCase()) {
               $('#folderInput').value = real; // pakai nama final dari server
             }
@@ -1185,7 +1202,7 @@
   }
 
   function pickWith(input) {
-    if (!targetFolder()) {
+    if (targetFolder() === null) {
       toast('Isi nama folder tujuan dulu', 'err');
       $('#folderInput').focus();
       return;
@@ -1239,7 +1256,8 @@
     }));
   });
 
-  // ---------- Teks ----------
+  // ---------- Teks (lembar dari ikon Teks) ----------
+  // Semua teks tersimpan di laptop. HP berakses Penuh dan laptop melihat daftarnya; HP "Hanya kirim" hanya bisa mengirim.
   async function loadClips() {
     const d = await api('/api/clips');
     const sig = JSON.stringify(d.clips) + Math.floor(Date.now() / 60000);
@@ -1247,60 +1265,108 @@
     if (sig !== clipsSig) { clipsSig = sig; renderClips(); }
   }
 
+  const IC_COPY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>';
+  const IC_SEL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h9"/></svg>';
+  const IC_LAP = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>';
+  const IC_HP = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>';
+
+  async function copyClip(c) {
+    toast((await copyText(c.text)) ? 'Disalin. Tempel di aplikasi lain.' : 'Gagal menyalin, tahan lalu pilih teksnya', '');
+  }
+
   function renderClips() {
     const list = $('#clipList');
     list.replaceChildren();
+    $('#clipCount').textContent = 'SEMUA TEKS · ' + clips.length;
     if (!clips.length) {
-      list.append(el('li', { class: 'empty', text: 'Belum ada teks. Kirim dari PC, lalu salin di HP (atau sebaliknya).' }));
+      list.append(el('li', { class: 'empty', text: 'Belum ada teks. Tulis di atas, lalu salin di perangkat lain.' }));
       return;
     }
     for (const c of clips) {
-      list.append(
-        el('li', { class: 'clip' },
-          el('div', { class: 'clip-text' }, linkify(c.text)),
-          el('div', { class: 'clip-foot' },
-            el('span', { text: (c.source === 'hp' ? 'dari HP' : c.source === 'pc' ? 'dari PC' : 'dikirim') + ' · ' + fmtTime(c.ts) }),
-            el('span', { class: 'actions' },
-              el('button', { class: 'btn small primary', type: 'button', text: 'Salin', onclick: async () => toast((await copyText(c.text)) ? 'Tersalin' : 'Gagal menyalin, tahan lalu pilih teksnya') }),
-              el('button', { class: 'btn small danger', type: 'button', text: 'Hapus', onclick: () => removeClip(c) }))))
-      );
+      const fromPc = c.source === 'pc';
+      const who = c.from || (fromPc ? 'Laptop' : c.source === 'hp' ? 'HP' : 'Perangkat');
+      const body = el('div', { class: 'clip-text' }, linkify(c.text));
+      const item = el('li', { class: 'clip' },
+        el('div', { class: 'clip-main' },
+          body,
+          el('span', { class: 'clip-from ' + (fromPc ? 'pc' : 'hp') }, svg(fromPc ? IC_LAP : IC_HP), el('span', { text: who }), el('span', { class: 'muted', text: '· ' + fmtTime(c.ts) }))),
+        el('div', { class: 'clip-acts' },
+          el('button', { type: 'button', class: 'btn soft small', onclick: () => copyClip(c) }, svg(IC_COPY), 'Salin'),
+          el('button', {
+            type: 'button', class: 'dots', 'aria-label': 'Pilihan teks', 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+            onclick: (e) => openMenu(e.currentTarget, [
+              { label: 'Salin', icon: IC_COPY, onclick: () => copyClip(c) },
+              { label: 'Pilih sebagian', icon: IC_SEL, onclick: () => selectPart(item, body) },
+              { label: 'Hapus', icon: IC.trash, danger: true, onclick: () => removeClip(c) },
+            ]),
+          }, svg(IC.dots))));
+      list.append(item);
     }
   }
 
-  async function removeClip(c) {
-    try { await api('/api/clips/' + c.id, { method: 'DELETE' }); await loadClips(); }
-    catch (e) { toast(e.message, 'err'); }
+  // Tampilkan teks lengkap lalu pilih semuanya; pengguna bisa mempersempit pilihan sendiri
+  function selectPart(item, body) {
+    item.classList.add('open');
+    const r = document.createRange();
+    r.selectNodeContents(body);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
   }
+
+  async function removeClip(c) {
+    try {
+      await api('/api/clips/' + c.id, { method: 'DELETE' });
+      await loadClips();
+      toast('Teks dihapus', '', {
+        label: 'Urungkan',
+        onclick: async () => {
+          try { await api('/api/clips/' + c.id + '/restore', { method: 'POST' }); await loadClips(); }
+          catch (e) { toast(e.message, 'err'); }
+        },
+      });
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
+  function openText() {
+    const full = myRole === 'full';
+    $('#clipHead').hidden = !full;
+    $('#clipList').hidden = !full;
+    $('#clipLocked').hidden = full;
+    $('#clipSendLabel').textContent = isOnPc ? 'Kirim' : 'Kirim ke laptop';
+    $('#clipPaste').hidden = !(navigator.clipboard && navigator.clipboard.readText && window.isSecureContext);
+    $('#textDlg').showModal();
+    if (full) loadClips().catch(() => {});
+    if (deviceKind === 'pc') $('#clipText').focus();
+  }
+  $('#textClose').addEventListener('click', () => $('#textDlg').close());
+  $('#textDlg').addEventListener('click', (e) => { if (e.target.id === 'textDlg') e.target.close(); });
+  $('#clipPaste').addEventListener('click', async () => {
+    try { const t = await navigator.clipboard.readText(); if (t) $('#clipText').value = t; } catch { toast('Tidak bisa membaca papan klip', 'err'); }
+  });
 
   $('#clipForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const ta = $('#clipText');
     const text = ta.value.trim();
-    if (!text) return;
+    if (!text) { ta.focus(); return; }
     try {
       await api('/api/clips', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ text, source: deviceKind }) });
       ta.value = '';
-      await loadClips();
+      toast(isOnPc ? 'Teks tersimpan, bisa disalin dari HP' : 'Teks terkirim ke laptop');
+      if (myRole === 'full') await loadClips();
     } catch (err) { toast(err.message, 'err'); }
   });
   $('#clipText').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#clipSend').click(); }
   });
 
-  // ---------- Mode kirim: File / Teks ----------
   function syncUpCard() {
     const has = !!$('#uploads').children.length;
     $('#upCard').hidden = !has;
     if (!has && !uploading && !queue.length) { batch.total = batch.done = 0; }
     renderSum();
   }
-  function setMode(m) {
-    $('#sendFile').hidden = m !== 'file';
-    $('#sendText').hidden = m !== 'text';
-    if (m === 'text') $('#clipText').focus();
-  }
-  $('#modeFile').addEventListener('click', () => setMode('file'));
-  $('#modeText').addEventListener('click', () => setMode('text'));
 
   // ---------- Folder baru (ikon folder+) ----------
   let newParent = '';
@@ -1334,11 +1400,27 @@
   });
 
   // ---------- Panel Pilih folder (halaman Kirim) ----------
+  // Tingkat atas: "Terakhir dipakai" (langsung terpilih saat diketuk), lalu "Semua folder" dengan "Tanpa folder" paling atas.
   let pickPath = '';
+  function chooseTarget(p) {
+    setTarget(p);
+    store.set('db_target', p);
+    $('#pickDlg').close();
+  }
+  function pickRow(f, { onclick, chev = true, sel = false, root = false, meta } = {}) {
+    return el('li', {},
+      el('button', { type: 'button', class: 'pick-row' + (sel ? ' sel' : ''), onclick },
+        el('span', { class: 'fic' + (root ? ' root' : '') }, svg(IC.folder)),
+        el('span', { class: 'meta' },
+          el('span', { class: 'name' + (root ? '' : ' code'), text: root ? ROOT_LABEL : (meta === undefined ? labelOf(f.name) : pathLabel(f.name)) }),
+          el('span', { class: 'sub', text: meta !== undefined ? meta : (f.subs ? `${f.subs} folder · ` : '') + `${f.count} file` })),
+        chev ? svg(IC.chev) : ''));
+  }
   function renderPick() {
     const nav = $('#pickCrumbs');
-    nav.replaceChildren(el('button', { type: 'button', class: 'link', text: 'File', onclick: () => { pickPath = ''; renderPick(); } }));
+    nav.replaceChildren();
     if (pickPath) {
+      nav.append(el('button', { type: 'button', class: 'link', text: 'Semua folder', onclick: () => { pickPath = ''; renderPick(); } }));
       const parts = pickPath.split('/');
       parts.forEach((x, i) => {
         nav.append(el('span', { 'aria-hidden': 'true', text: ' › ' }));
@@ -1346,41 +1428,46 @@
         nav.append(i === parts.length - 1 ? el('b', { text: x }) : el('button', { type: 'button', class: 'link', text: x, onclick: () => { pickPath = p; renderPick(); } }));
       });
     }
+    const cur = targetFolder();
+    // Terakhir dipakai: hanya di tingkat atas, hanya folder yang masih ada
+    const recent = pickPath ? [] : recentTargets().map((p) => findFolder(p)).filter(Boolean).slice(0, 3);
+    $('#pickRecentCap').hidden = !recent.length;
+    $('#pickRecent').replaceChildren(...recent.map((f) => pickRow(f, {
+      onclick: () => chooseTarget(f.name), chev: false, sel: cur !== null && cur.toLowerCase() === f.name.toLowerCase(),
+      meta: (f.subs ? `${f.subs} folder · ` : '') + `${f.count} file · ${fmtTime(f.modified)}`,
+    })));
+    $('#pickAllCap').hidden = !!pickPath;
     const kids = sortBy(childrenOf(pickPath), 'az');
-    $('#pickList').replaceChildren(...(kids.length ? kids.map((f) => el('li', {},
-      el('button', { type: 'button', class: 'pick-row', onclick: () => { pickPath = f.name; renderPick(); } },
-        el('span', { class: 'fic' }, svg(IC.folder)),
-        el('span', { class: 'meta' },
-          el('span', { class: 'name', text: labelOf(f.name) }),
-          el('span', { class: 'sub', text: (f.subs ? `${f.subs} folder · ` : '') + `${f.count} file` })),
-        svg(IC.chev)))) : [el('li', { class: 'empty', text: pickPath ? 'Belum ada subfolder di sini.' : 'Belum ada folder.' })]));
+    const rows = kids.map((f) => pickRow(f, { onclick: () => { pickPath = f.name; renderPick(); } }));
+    if (!pickPath) {
+      rows.unshift(pickRow({ name: '' }, {
+        onclick: () => chooseTarget(ROOT_LABEL), chev: false, root: true, sel: cur === '',
+        meta: 'Langsung di folder penyimpanan' + (rootInfo.count ? ` · ${rootInfo.count} file` : ''),
+      }));
+    }
+    if (!kids.length && pickPath) rows.push(el('li', { class: 'empty', text: 'Belum ada subfolder di sini.' }));
+    $('#pickList').replaceChildren(...rows);
     $('#pickUp').hidden = !pickPath;
     $('#pickOk').hidden = !pickPath;
     $('#pickOk').textContent = 'Pilih ' + (pickPath ? labelOf(pickPath) : '');
     $('#pickNew').hidden = depthOf(pickPath) >= MAX_DEPTH;
+    $('.pick-foot').classList.toggle('one', !pickPath || depthOf(pickPath) >= MAX_DEPTH);
   }
-  $('#pickBtn').addEventListener('click', () => {
+  function openPick() {
     const cur = cleanFolder($('#folderInput').value || '');
-    // Mulai dari folder tujuan sekarang (bila ada), supaya gampang pilih subfoldernya
-    pickPath = cur && findFolder(cur) ? findFolder(cur).name : (cur && findFolder(parentOf(cur)) ? findFolder(parentOf(cur)).name : '');
+    // Di dalam folder tujuan sekarang bila folder itu punya subfolder; selain itu mulai dari atas
+    const f = cur && !isRootLabel($('#folderInput').value) ? findFolder(cur) : null;
+    pickPath = f && childrenOf(f.name).length ? f.name : '';
     renderPick();
     $('#pickDlg').showModal();
-  });
+  }
+  $('#pickBtn').addEventListener('click', openPick);
   $('#pickUp').addEventListener('click', () => { pickPath = parentOf(pickPath); renderPick(); });
   $('#pickClose').addEventListener('click', () => $('#pickDlg').close());
   $('#pickDlg').addEventListener('click', (e) => { if (e.target.id === 'pickDlg') e.target.close(); });
-  $('#pickOk').addEventListener('click', () => {
-    if (!pickPath) return;
-    setTarget(pickPath);
-    store.set('db_target', pickPath);
-    $('#pickDlg').close();
-  });
+  $('#pickOk').addEventListener('click', () => { if (pickPath) chooseTarget(pickPath); });
   $('#pickNew').addEventListener('click', () => {
-    openNew(pickPath, (p) => {
-      setTarget(p);
-      store.set('db_target', p);
-      $('#pickDlg').close();
-    });
+    openNew(pickPath, (p) => chooseTarget(p));
   });
 
   // ---------- Khusus laptop/PC ini: folder penyimpanan, Explorer, Selamat datang ----------
@@ -1393,13 +1480,11 @@
   const isCloud = (p) => /OneDrive|Google Drive|Dropbox/i.test(p);
   const ICON_CLOUD = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 9.5 4.25 4.25 0 0 0 7 18z"/></svg>';
 
+  // Lokasi simpan hanya terlihat dari laptop ini: ikon "Folder penyimpanan" di Home dan baris di Pengaturan
   function renderStore() {
-    $('#storeLine').hidden = !storageDir;
-    if (!storageDir) return;
-    $('#storePath').textContent = shortPath(storageDir);
-    $('#storeChip').title = storageDir;
-    $('#storeChip').classList.toggle('cloud', isCloud(storageDir));
-    $('#storeIc').replaceChildren(svg(isCloud(storageDir) ? ICON_CLOUD : IC.folder));
+    $('#tStore').hidden = !storageDir;
+    $('#storeNow').textContent = storageDir ? shortPath(storageDir) : '';
+    $('#storeNow').title = storageDir;
   }
 
   async function loadStorage() {
@@ -1511,18 +1596,41 @@
   applyTheme(store.get('db_theme'));
 
   // ---------- Pengaturan (ikon di kanan atas) ----------
-  $('#setBtn').addEventListener('click', () => { $('#myName').textContent = myName || 'Belum diberi nama'; $('#setDlg').showModal(); });
+  // Urutan sama di semua tempat: Perangkat ini, Laptop ini (hanya di laptop), Tentang, Keluar (tidak di laptop).
+  function renderSettings() {
+    const onPc = isOnPc;
+    $('#setSub').textContent = onPc ? (pcInfo.name || 'Laptop ini') : (myName || (deviceKind === 'hp' ? 'HP ini' : 'Perangkat ini'));
+    $('#nameLabel').textContent = onPc ? 'Nama laptop' : 'Nama perangkat';
+    $('#nameSub').textContent = onPc ? 'Terlihat di HP saat memilih tujuan' : 'Terlihat di laptop saat minta izin';
+    $('#renameBtn').hidden = onPc; // nama laptop = nama komputer; diubah dari pengaturan sistem
+    $('#myName').textContent = myName || 'Belum diberi nama';
+    $('#themeSys').textContent = deviceKind === 'hp' ? 'Ikuti HP' : 'Ikuti sistem';
+    $('#pcSet').hidden = !myLocal;
+    $('#verName').textContent = onPc ? 'DropBridge PC' : 'Laptop · ' + (pcInfo.name || pcLabel());
+    const addr = pcInfo.url ? pcInfo.url.replace(/^https?:\/\//, '') : '';
+    $('#verSub').textContent = [pcInfo.os, addr].filter(Boolean).join(' · ');
+    $('#verNum').textContent = pcInfo.version;
+    $('#dataRow').hidden = !myLocal;
+    $('#logout').hidden = onPc;
+    $('#logout').textContent = 'Keluar dari ' + (pcInfo.name || 'laptop');
+  }
+  $('#setBtn').addEventListener('click', () => { renderSettings(); $('#setDlg').showModal(); });
   $('#setClose').addEventListener('click', () => $('#setDlg').close());
+  $('#setDlg').addEventListener('click', (e) => { if (e.target.id === 'setDlg') e.target.close(); });
+  $('#dataBtn').addEventListener('click', async () => {
+    try { await api('/api/storage/open-data', { method: 'POST' }); toast('Folder data dibuka di laptop'); }
+    catch (err) { toast(err.message, 'err'); }
+  });
 
   // ---------- Login / sesi ----------
   let lastRefresh = 0;
   async function refresh() {
     try {
       const jobs = [loadFolders()];
-      if (myRole === 'full') jobs.push(loadClips());
+      if (myRole === 'full' && $('#textDlg').open) jobs.push(loadClips());
       if (inFolder() && myRole === 'full') jobs.push(loadFiles());
       if (route.type === 'more') jobs.push(renderDevices());
-      if (route.type === 'send' && myRole === 'full') jobs.push(loadRecent());
+      if (isOnPc && myRole === 'full') jobs.push(loadIncoming());
       await Promise.all(jobs);
       setOnline(true);
       lastRefresh = Date.now();
@@ -1549,43 +1657,60 @@
     finally { setTimeout(() => b.classList.remove('spin'), 400); }
   });
 
-  // Kecilkan foto: diatur dari Pengaturan, ringkasannya tampil di halaman Kirim.
+  // ---------- Baris ikon di Home ----------
+  // Foto kecil: hidup = foto dikecilkan ke bawah batas (bawaan 512 KB) sebelum dikirim. Hanya di Home, tidak di Pengaturan.
+  const shrinkOn = () => photoMaxKB > 0 && store.get('db_shrink') !== '0';
   function renderShrink() {
-    const on = $('#shrinkPhotos').checked;
-    $('#shrinkLine').hidden = photoMaxKB <= 0;
-    $('#shrinkText').textContent = on ? `Foto dikecilkan ≤ ${photoMaxKB} KB` : 'Foto dikirim resolusi penuh';
+    const b = $('#tShrink');
+    b.hidden = photoMaxKB <= 0;
+    b.setAttribute('aria-pressed', shrinkOn() ? 'true' : 'false');
+    b.title = shrinkOn() ? `Foto dikecilkan ≤ ${photoMaxKB} KB. Ketuk untuk resolusi penuh.` : 'Foto dikirim resolusi penuh. Ketuk untuk mengecilkan.';
   }
-  $('#shrinkPhotos').checked = store.get('db_shrink') !== '0';
-  $('#shrinkPhotos').addEventListener('change', (e) => { store.set('db_shrink', e.target.checked ? '1' : '0'); renderShrink(); });
-  $('#shrinkEdit').addEventListener('click', () => $('#setBtn').click());
+  $('#tShrink').addEventListener('click', () => {
+    store.set('db_shrink', shrinkOn() ? '0' : '1');
+    renderShrink();
+    toast(shrinkOn() ? `Foto dikecilkan ≤ ${photoMaxKB} KB` : 'Foto dikirim resolusi penuh');
+  });
   renderShrink();
+  $('#tAll').addEventListener('click', () => { location.hash = '#/folders'; });
+  $('#tText').addEventListener('click', openText);
+  $('#tStore').addEventListener('click', changeStorage);
+  $('#tAdd').addEventListener('click', () => { location.hash = '#/hubungkan'; });
+  $('#tRefresh').addEventListener('click', async () => {
+    const b = $('#tRefresh');
+    if (b.classList.contains('spin')) return;
+    b.classList.add('spin');
+    foldersSig = '';
+    try { await refresh(); await loadInfo(); toast(online ? 'Diperbarui ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Laptop tidak terjangkau', online ? '' : 'err'); }
+    finally { setTimeout(() => b.classList.remove('spin'), 400); }
+  });
 
-  // ---------- Masuk terakhir ----------
-  let recentSig = '';
-  async function loadRecent() {
-    if (route.type !== 'send') return;
-    const d = await api('/api/files/recent?limit=' + (window.innerWidth >= 960 ? 6 : 4));
-    const sig = JSON.stringify(d.files) + Math.floor(Date.now() / 60000);
-    if (sig === recentSig) return;
-    recentSig = sig;
-    const list = $('#recentList');
-    list.replaceChildren(...d.files.map((f) => {
-      const pic = el('span', { class: 'pic' });
-      if (f.thumb) {
-        const img = el('img', { class: 'thumb', loading: 'lazy', alt: '', src: `/api/files/${enc(f.name)}/thumb?folder=${enc(f.folder)}` });
-        img.addEventListener('error', () => img.replaceWith(el('span', { class: 'ext', 'data-kind': f.kind, text: extOf(f.name) })), { once: true });
-        pic.append(img);
-      } else pic.append(el('span', { class: 'ext', 'data-kind': f.kind, text: extOf(f.name) }));
-      return el('li', {},
-        el('a', { class: 'rrow', href: f.folder ? '#/f/' + enc(f.folder) : '#/root' },
-          pic,
-          el('span', { class: 'meta' },
-            el('span', { class: 'name', text: f.name, title: f.name }),
-            el('span', { class: 'sub', text: pathLabel(f.folder) + ' · ' + fmtTime(f.modified) })),
-          el('span', { class: 'ok', title: 'Sudah di PC' }, svg(IC.check))));
-    }));
-    $('#recentCard').hidden = !d.files.length;
+  // Kartu tujuan di HP: laptop yang dituju + titik status
+  function renderRouteRow() {
+    $('#routeRow').hidden = isOnPc;
+    $('#routeName').textContent = pcInfo.name || pcLabel();
+    $('#routeOs').textContent = pcInfo.os ? ' · ' + pcInfo.os : '';
+    $('#routeDot').classList.toggle('off', !online);
   }
+
+  // ---------- Kabar file masuk (Home laptop) ----------
+  let inSeq = -1;
+  let inShown = null;
+  async function loadIncoming() {
+    if (route.type !== 'send') return;
+    const d = await api('/api/files/incoming?since=' + inSeq);
+    const first = inSeq < 0;
+    inSeq = d.seq;
+    if (first || !d.batches.length) return;
+    const b = d.batches[d.batches.length - 1];
+    inShown = b;
+    const what = b.images === b.count ? (b.count > 1 ? `${b.count} foto` : '1 foto') : `${b.count} file`;
+    $('#inTitle').textContent = `${what} masuk` + (b.from && b.dev !== 'pc' ? ' dari ' + b.from : '');
+    $('#inSub').replaceChildren('ke ', el('span', { class: 'code', text: pathLabel(b.folder) }), ' · baru saja');
+    $('#inBanner').hidden = false;
+  }
+  $('#inOpen').addEventListener('click', () => { if (inShown) location.hash = inShown.folder ? '#/f/' + enc(inShown.folder) : '#/root'; $('#inBanner').hidden = true; });
+  $('#inClose').addEventListener('click', () => { $('#inBanner').hidden = true; });
 
   // ---------- Identitas perangkat ----------
   let myName = '';
@@ -1605,10 +1730,9 @@
       myName = s.name || '';
       myLocal = !!s.local;
       applyRole(s.role);
-      $('#pinBtn').hidden = !myLocal;
-      $('#approveRow').hidden = !myLocal;
+      if (s.pin) $('#pinNow').textContent = s.pin.replace(/^(\d{3})(\d{3})$/, '$1 $2');
       if (myLocal) startPendingWatch();
-      $('#myName').textContent = myName || 'Belum diberi nama';
+      renderSettings();
       $('#devOthers').hidden = !myLocal;
       if (myLocal) api('/api/devices/pending').then((d) => { $('#approveChk').checked = !!d.approve_new; }).catch(() => {});
       $('#devNote').hidden = myLocal;
@@ -1636,7 +1760,7 @@
       myName = r.name;
       store.set('db_devname', r.name);
       $('#nameDlg').close();
-      $('#myName').textContent = myName;
+      renderSettings();
       if (route.type === 'more') renderDevices();
     } catch (err) { toast(err.message, 'err'); }
   });
@@ -1653,12 +1777,6 @@
     try {
       devInfo = await api('/api/devices');
       renderStatus();
-      // Di PC: kartu kecil perangkat yang sedang terhubung di halaman Kirim
-      const others = devInfo.devices.filter((v) => !v.current && v.online);
-      $('#devCard').hidden = !isOnPc;
-      $('#devChips').replaceChildren(...(others.length
-        ? others.map((v) => el('span', { class: 'chip dev-chip' }, el('span', { class: 'dev-dot on' }), v.name))
-        : [el('span', { class: 'muted small', text: 'Belum ada HP yang terhubung.' })]));
     } catch { /* abaikan */ }
   }
 
@@ -1782,7 +1900,7 @@
     try {
       const r = await api('/api/pin', { method: 'POST', headers: JSON_HEADERS, body: '{}' });
       toast('PIN baru: ' + r.pin);
-      $('#pinLine').textContent = 'PIN sekarang: ' + r.pin;
+      $('#pinNow').textContent = String(r.pin).replace(/^(\d{3})(\d{3})$/, '$1 $2');
       renderAddr();
     } catch (err) { toast(err.message, 'err'); }
   });

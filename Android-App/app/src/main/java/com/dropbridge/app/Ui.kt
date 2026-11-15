@@ -54,6 +54,19 @@ object Icon {
     const val FOLDER_PLUS = 26
     const val GLOBE = 27
     const val REFRESH = 28
+    const val FOLDERS = 29
+    const val SHRINK = 30
+    const val ADD_PHONE = 31
+    const val TEXT = 32
+    const val COPY = 33
+    const val TRASH = 34
+    const val PASTE = 35
+    const val LOCK = 36
+    const val QUEUE = 37
+    const val CLOSE = 38
+    const val DRIVE = 39
+    const val LAPTOP = 40
+    const val CHEVRON = 41
 }
 
 class IconView(ctx: Context, private val kind: Int, private val color: Int, private val sizeDp: Int = 24, private val sw: Float = 1.9f) : View(ctx) {
@@ -216,6 +229,68 @@ class IconView(ctx: Context, private val kind: Int, private val color: Int, priv
                 poly(c, false, 4.5f, 5f, 4.6f, 9.2f, 8.8f, 9f)
                 poly(c, false, 19.5f, 19f, 19.4f, 14.8f, 15.2f, 15f)
             }
+            Icon.FOLDERS -> {
+                poly(c, true, 3f, 6f, 9f, 6f, 11f, 8f, 21f, 8f, 21f, 19f, 3f, 19f)
+                poly(c, false, 7f, 12.5f, 17f, 12.5f)
+                poly(c, false, 7f, 15.5f, 13f, 15.5f)
+            }
+            Icon.SHRINK -> {
+                poly(c, false, 4f, 14f, 10f, 14f, 10f, 20f)
+                poly(c, false, 20f, 10f, 14f, 10f, 14f, 4f)
+                poly(c, false, 14f, 10f, 21f, 3f)
+                poly(c, false, 3f, 21f, 10f, 14f)
+            }
+            Icon.ADD_PHONE -> {
+                c.drawRoundRect(RectF(7f, 3f, 17f, 21f), 2f, 2f, p)
+                poly(c, false, 12f, 8f, 12f, 14f)
+                poly(c, false, 9f, 11f, 15f, 11f)
+            }
+            Icon.TEXT -> {
+                poly(c, false, 5f, 6f, 19f, 6f)
+                poly(c, false, 5f, 12f, 19f, 12f)
+                poly(c, false, 5f, 18f, 14f, 18f)
+            }
+            Icon.COPY -> {
+                c.drawRoundRect(RectF(8f, 8f, 20f, 20f), 2f, 2f, p)
+                poly(c, false, 16f, 8f, 16f, 4f, 4f, 4f, 4f, 16f, 8f, 16f)
+            }
+            Icon.TRASH -> {
+                poly(c, false, 4f, 7f, 20f, 7f)
+                poly(c, false, 6f, 7f, 7f, 20f, 17f, 20f, 18f, 7f)
+                poly(c, false, 9f, 7f, 9f, 4f, 15f, 4f, 15f, 7f)
+                poly(c, false, 10f, 11f, 10f, 17f)
+                poly(c, false, 14f, 11f, 14f, 17f)
+            }
+            Icon.PASTE -> {
+                c.drawRoundRect(RectF(6f, 4f, 18f, 21f), 2f, 2f, p)
+                poly(c, true, 9f, 3f, 15f, 3f, 15f, 6f, 9f, 6f)
+            }
+            Icon.LOCK -> {
+                c.drawRoundRect(RectF(5f, 11f, 19f, 20f), 2f, 2f, p)
+                c.drawArc(RectF(8f, 4f, 16f, 12f), 180f, 180f, false, p)
+                poly(c, false, 8f, 8f, 8f, 11f)
+                poly(c, false, 16f, 8f, 16f, 11f)
+            }
+            Icon.QUEUE -> {
+                poly(c, false, 4f, 6f, 20f, 6f)
+                poly(c, false, 4f, 12f, 20f, 12f)
+                poly(c, false, 4f, 18f, 14f, 18f)
+                c.drawCircle(19f, 18f, 2f, p)
+            }
+            Icon.CLOSE -> {
+                poly(c, false, 6f, 6f, 18f, 18f)
+                poly(c, false, 18f, 6f, 6f, 18f)
+            }
+            Icon.DRIVE -> {
+                poly(c, true, 3f, 6f, 9f, 6f, 11f, 8f, 21f, 8f, 21f, 19f, 3f, 19f)
+                poly(c, false, 12f, 11f, 12f, 16f)
+                poly(c, false, 9.5f, 13.5f, 12f, 16f, 14.5f, 13.5f)
+            }
+            Icon.LAPTOP -> {
+                c.drawRoundRect(RectF(4f, 5f, 20f, 16f), 1.5f, 1.5f, p)
+                poly(c, false, 2f, 19f, 22f, 19f)
+            }
+            Icon.CHEVRON -> poly(c, false, 9f, 6f, 15f, 12f, 9f, 18f)
             Icon.GLOBE -> {
                 c.drawCircle(12f, 12f, 9f, p)
                 c.drawOval(RectF(8f, 3f, 16f, 21f), p)
@@ -302,19 +377,44 @@ object Ui {
     var INDIGO = 0; var INDIGO_FILL = 0; var INDIGO_DEEP = 0; var INDIGO_SOFT = 0; var INDIGO_INK = 0
 
     private fun c(light: String, night: String): Int = Color.parseColor(if (dark) night else light)
+    /** Warna lain yang memakai pilihan terang/gelap; dipakai untuk teks di atas FILL. */
+    var ON_FILL = 0
 
+    // Warna dari design/tokens.json (Tokens.kt dibuat oleh build_tokens.py). Nama lama tetap dipakai layar-layar.
     private fun setColors() {
-        GROUND = c("#F7F8F7", "#0A1A18"); CARD = c("#FFFFFF", "#10272A")
-        INK = c("#0B1F1C", "#E6F2F0"); MUTED = c("#4B635F", "#9DB8B3"); HINT = c("#6B817D", "#7C958F")
-        LINE = c("#D5E2DF", "#1F3D39"); LINE2 = c("#C3D3CF", "#2B4C47"); DIVIDER = c("#EDF3F1", "#183230")
-        ACCENT = c("#0F766E", "#2DD4BF"); FILL = c("#0F766E", "#0F766E"); DEEP = c("#0B3D38", "#CCFBF1")
-        SOFT = c("#D6EEE9", "#12403A"); SOFT2 = c("#E2F1EE", "#133B37"); TINT = c("#F0F7F5", "#0F302D"); FIELD = c("#F4F7F6", "#0D2321")
-        MINT = c("#BFE3DC", "#1E5A52"); DANGER = c("#B42318", "#F87171"); GREEN = c("#4ADE80", "#4ADE80"); OK = c("#16A34A", "#4ADE80")
-        AMBER = c("#F5B942", "#F5B942"); AMBER_BG = c("#FFF4DB", "#3A2A0A"); AMBER_TX = c("#5C3A00", "#FCD34D")
-        WARN_BG = c("#FFF7ED", "#2E1D0E"); WARN_LINE = c("#FED7AA", "#6B3A12"); WARN_TX = c("#9A3412", "#FDBA74"); WARN_BADGE = c("#FFEDD5", "#4A2A10")
-        INDIGO = c("#4F46E5", "#A5B4FC"); INDIGO_FILL = c("#4F46E5", "#4F46E5"); INDIGO_DEEP = c("#312E81", "#1E1B4B")
-        INDIGO_SOFT = c("#E0E7FF", "#232A55"); INDIGO_INK = c("#3730A3", "#C7D2FE")
+        Tokens.dark = dark
+        GROUND = Tokens.BG; CARD = Tokens.SURFACE
+        INK = Tokens.TEXT; MUTED = Tokens.TEXT_MUTED; HINT = c("#6B7D79", "#8DA29D")
+        LINE = Tokens.BORDER; LINE2 = Tokens.BORDER_INPUT; DIVIDER = Tokens.SURFACE_2
+        ACCENT = Tokens.ACCENT; FILL = Tokens.ACCENT; ON_FILL = Tokens.ON_ACCENT; DEEP = Tokens.ON_ACCENT_SOFT
+        SOFT = Tokens.ACCENT_SOFT; SOFT2 = Tokens.ACCENT_SOFT; TINT = Tokens.SURFACE_2; FIELD = Tokens.SURFACE_2
+        MINT = c("#BFE3DC", "#1E5A52"); DANGER = Tokens.DANGER; GREEN = Tokens.SUCCESS; OK = Tokens.SUCCESS
+        AMBER = c("#F5B942", "#F5B942"); AMBER_BG = Tokens.WARNING_SOFT; AMBER_TX = Tokens.WARNING
+        WARN_BG = Tokens.WARNING_SOFT; WARN_LINE = c("#F3D19E", "#6B4A12"); WARN_TX = Tokens.WARNING; WARN_BADGE = c("#FFE3BD", "#4A3410")
+        INDIGO = Tokens.GUEST; INDIGO_FILL = c("#4F46E5", "#4F46E5"); INDIGO_DEEP = c("#312E81", "#1E1B4B")
+        INDIGO_SOFT = Tokens.GUEST_SOFT; INDIGO_INK = Tokens.ON_GUEST_SOFT
     }
+
+    // Huruf ikut terpasang (assets/fonts, lisensi OFL): Plus Jakarta Sans + IBM Plex Mono untuk nomor kontainer.
+    var FONT: Typeface = Typeface.DEFAULT; private set
+    var FONT_BOLD: Typeface = Typeface.DEFAULT_BOLD; private set
+    var FONT_XBOLD: Typeface = Typeface.DEFAULT_BOLD; private set
+    var FONT_MONO: Typeface = Typeface.MONOSPACE; private set
+    private var fontsLoaded = false
+    fun loadFonts(c: Context) {
+        if (fontsLoaded) return
+        try {
+            val am = c.applicationContext.assets
+            FONT = Typeface.createFromAsset(am, "fonts/jakarta-500.ttf")
+            FONT_BOLD = Typeface.createFromAsset(am, "fonts/jakarta-700.ttf")
+            FONT_XBOLD = Typeface.createFromAsset(am, "fonts/jakarta-800.ttf")
+            FONT_MONO = Typeface.createFromAsset(am, "fonts/plexmono-600.ttf")
+        } catch (e: Exception) { /* pakai huruf bawaan HP */ }
+        fontsLoaded = true
+    }
+
+    /** Huruf mono untuk nomor kontainer/dokumen (mis. TCKU 6177329 › 30-23). */
+    fun mono(t: TextView): TextView { t.typeface = FONT_MONO; return t }
 
     init { setColors() }
 
@@ -346,6 +446,7 @@ object Ui {
 
     /** Tentukan terang/gelap untuk layar ini. Dipanggil oleh screen() sebelum tampilan dibuat. */
     fun applyTheme(a: Context) {
+        loadFonts(a)
         dark = wantDark(a)
         setColors()
         if (a is Activity) a.setTheme(if (dark) android.R.style.Theme_Material_NoActionBar else android.R.style.Theme_Material_Light_NoActionBar)
@@ -376,17 +477,17 @@ object Ui {
             text = t
             textSize = sp
             setTextColor(color)
-            if (bold) setTypeface(typeface, Typeface.BOLD)
+            typeface = if (bold) (if (sp >= 20f) FONT_XBOLD else FONT_BOLD) else FONT
         }
 
     /** Judul kecil huruf besar di atas bagian. */
     fun caption(c: Context, t: String): TextView =
-        text(c, t.uppercase(), 12f, true, MUTED).apply { letterSpacing = 0.05f }
+        text(c, t.uppercase(), 12f, true, MUTED).apply { letterSpacing = 0.06f }
 
     fun card(c: Context, fill: Int = CARD, pad: Int = 16): LinearLayout =
         LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
-            background = rounded(c, fill, 20, if (fill == CARD) LINE else 0)
+            background = rounded(c, fill, 18, if (fill == CARD) LINE else 0)
             setPadding(dp(c, pad), dp(c, pad), dp(c, pad), dp(c, pad))
         }
 
@@ -402,8 +503,8 @@ object Ui {
     fun setDot(v: View, color: Int) { (v.background as GradientDrawable).setColor(color) }
 
     private fun palette(k: Kind): Triple<Int, Int, Int> = when (k) {
-        Kind.PRIMARY -> Triple(FILL, WHITE, 0)
-        Kind.OUTLINE -> Triple(CARD, INK, LINE2)
+        Kind.PRIMARY -> Triple(FILL, ON_FILL, 0)
+        Kind.OUTLINE -> Triple(CARD, INK, LINE)
         Kind.DEEP -> Triple(if (dark) Color.parseColor("#134E48") else DEEP, WHITE, 0)
         Kind.DANGER -> Triple(if (dark) Color.parseColor("#B42318") else DANGER, WHITE, 0)
         Kind.SOFT -> Triple(SOFT, DEEP, 0)
@@ -415,10 +516,10 @@ object Ui {
         return UiButton(c).apply {
             text = label
             isAllCaps = false
-            textSize = 15f
-            setTypeface(typeface, Typeface.BOLD)
+            textSize = 16f
+            typeface = FONT_BOLD
             setTextColor(fg)
-            background = ripple(c, fill, 16, stroke)
+            background = ripple(c, fill, 12, stroke)
             stateListAnimator = null
             minHeight = 0
             minimumHeight = dp(c, h)
@@ -436,10 +537,10 @@ object Ui {
             gravity = Gravity.CENTER
             isClickable = true
             isFocusable = true
-            background = ripple(c, fill, if (h >= 64) 20 else 16, stroke)
+            background = ripple(c, fill, if (h >= 64) 18 else 12, stroke)
             minimumHeight = dp(c, h)
             setPadding(dp(c, 14), 0, dp(c, 14), 0)
-            addView(IconView(c, icon, fg, 22, 2.1f))
+            addView(IconView(c, icon, if (kind == Kind.SOFT) ACCENT else fg, if (h >= 64) 26 else 22, 2.1f))
             addView(text(c, label, ts, true, fg).apply { setPadding(dp(c, 10), 0, 0, 0) })
             setOnClickListener { onClick() }
         }
@@ -464,9 +565,9 @@ object Ui {
         e.hint = hint
         e.setHintTextColor(HINT)
         e.setTextColor(INK)
-        e.textSize = 15f
-        e.setTypeface(e.typeface, Typeface.BOLD)
-        e.background = rounded(c, FIELD, 12, LINE2)
+        e.textSize = 16f
+        e.typeface = FONT_BOLD
+        e.background = rounded(c, CARD, 12, LINE2)
         e.setPadding(dp(c, 12), 0, dp(c, 12), 0)
         e.minimumHeight = dp(c, 48)
         e.setSingleLine(true)
@@ -490,7 +591,7 @@ object Ui {
         val head = LinearLayout(a).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(a, if (back) 8 else 20), dp(a, 10), dp(a, 20), dp(a, 4))
+            setPadding(dp(a, if (back) 8 else 16), dp(a, 12), dp(a, 16), dp(a, 4))
         }
         if (back) {
             val b = FrameLayout(a).apply {
@@ -503,14 +604,14 @@ object Ui {
             head.addView(b, LinearLayout.LayoutParams(dp(a, 44), dp(a, 44)))
         } else {
             val logo = FrameLayout(a).apply {
-                background = rounded(a, FILL, 11)
+                background = rounded(a, Color.parseColor("#0F766E"), 12)
                 addView(IconView(a, Icon.LOGO, WHITE, 24, 2.0f), FrameLayout.LayoutParams(dp(a, 24), dp(a, 24), Gravity.CENTER))
             }
-            head.addView(logo, LinearLayout.LayoutParams(dp(a, 36), dp(a, 36)).apply { rightMargin = dp(a, 10) })
+            head.addView(logo, LinearLayout.LayoutParams(dp(a, 40), dp(a, 40)).apply { rightMargin = dp(a, 12) })
         }
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-        val t = text(a, title, 20f, true, INK)
-        val st = text(a, subtitle ?: "", 12f, false, MUTED)
+        val t = text(a, title, 22f, true, INK)
+        val st = text(a, subtitle ?: "", 14f, false, MUTED).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         st.visibility = if (subtitle.isNullOrEmpty()) View.GONE else View.VISIBLE
         col.addView(t)
         col.addView(st)
@@ -530,28 +631,28 @@ object Ui {
                 isClickable = true
                 isFocusable = true
                 contentDescription = "Muat ulang"
-                background = ripple(a, CARD, 14, LINE)
+                background = ripple(a, CARD, 12, LINE)
                 setOnClickListener { onRefresh() }
                 addView(ic, FrameLayout.LayoutParams(dp(a, 22), dp(a, 22), Gravity.CENTER))
             }
-            head.addView(r, LinearLayout.LayoutParams(dp(a, 44), dp(a, 44)).apply { leftMargin = dp(a, 8) })
+            head.addView(r, LinearLayout.LayoutParams(dp(a, 48), dp(a, 48)).apply { leftMargin = dp(a, 8) })
         }
         if (nav >= 0) {
             val g = FrameLayout(a).apply {
                 isClickable = true
                 isFocusable = true
                 contentDescription = "Pengaturan"
-                background = ripple(a, CARD, 14, LINE)
+                background = ripple(a, CARD, 12, LINE)
                 setOnClickListener { a.startActivity(android.content.Intent(a, MoreActivity::class.java)) }
                 addView(IconView(a, Icon.GEAR, INK, 22, 2f), FrameLayout.LayoutParams(dp(a, 22), dp(a, 22), Gravity.CENTER))
             }
-            head.addView(g, LinearLayout.LayoutParams(dp(a, 44), dp(a, 44)).apply { leftMargin = dp(a, 8) })
+            head.addView(g, LinearLayout.LayoutParams(dp(a, 48), dp(a, 48)).apply { leftMargin = dp(a, 8) })
         }
         root.addView(head, LinearLayout.LayoutParams(MATCH, WRAP))
 
         val content = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(a, 20), dp(a, 12), dp(a, 20), dp(a, 24))
+            setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 24))
         }
         val sv = ScrollView(a).apply { addView(content, ViewGroup.LayoutParams(MATCH, WRAP)) }
         root.addView(sv, LinearLayout.LayoutParams(MATCH, 0, 1f))
@@ -619,16 +720,146 @@ object Ui {
                 isClickable = true
                 isFocusable = true
                 contentDescription = label
-                minimumHeight = dp(a, 64)
+                minimumHeight = dp(a, 72)
                 background = RippleDrawable(ColorStateList.valueOf(if (dark) Color.argb(40, 255, 255, 255) else Color.argb(30, 0, 0, 0)), null, null)
                 setOnClickListener { if (!on) goTab(a, tab) }
             }
-            col.addView(IconView(a, icon, if (on) ACCENT else MUTED, 24, if (on) 2.3f else 1.9f))
-            col.addView(text(a, label, 12f, on, if (on) ACCENT else MUTED), lp(a, WRAP, WRAP, t = 4))
+            val pill = FrameLayout(a).apply {
+                if (on) background = rounded(a, SOFT, 999)
+                addView(IconView(a, icon, if (on) DEEP else MUTED, 24, if (on) 2.3f else 1.9f), FrameLayout.LayoutParams(dp(a, 24), dp(a, 24), Gravity.CENTER))
+            }
+            col.addView(pill, LinearLayout.LayoutParams(dp(a, 56), dp(a, 30)))
+            col.addView(text(a, label, 12f, on, if (on) DEEP else MUTED), lp(a, WRAP, WRAP, t = 4))
             row.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
         }
         return row
     }
+
+    // ---------- DropBridge 3: komponen bersama ----------
+
+    /** Satu ikon berlabel kecil di baris ikon Home. badge = angka (mis. antrean), on = titik hijau (mis. Foto kecil hidup). */
+    class Tool(val label: String, val icon: Int, val badge: String? = null, val on: Boolean? = null, val click: (View) -> Unit)
+
+    fun tools(c: Context, items: List<Tool>): LinearLayout {
+        val row = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = rounded(c, CARD, 18, LINE)
+            setPadding(dp(c, 6), dp(c, 8), dp(c, 6), dp(c, 8))
+        }
+        for (t in items) {
+            val col = LinearLayout(c).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                isClickable = true
+                isFocusable = true
+                contentDescription = t.label + when (t.on) { true -> ", hidup"; false -> ", mati"; else -> "" } + (t.badge?.let { ", $it" } ?: "")
+                background = ripple(c, CARD, 12)
+                setPadding(dp(c, 2), dp(c, 6), dp(c, 2), dp(c, 6))
+                setOnClickListener { t.click(it) }
+            }
+            val box = FrameLayout(c)
+            val ic = FrameLayout(c).apply {
+                background = rounded(c, FIELD, 14)
+                addView(IconView(c, t.icon, if (t.on == false) MUTED else ACCENT, 22, 2f), FrameLayout.LayoutParams(dp(c, 22), dp(c, 22), Gravity.CENTER))
+            }
+            box.addView(ic, FrameLayout.LayoutParams(dp(c, 44), dp(c, 44), Gravity.CENTER))
+            if (t.on == true) box.addView(View(c).apply {
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(OK); setStroke(dp(c, 2), CARD) }
+            }, FrameLayout.LayoutParams(dp(c, 13), dp(c, 13), Gravity.TOP or Gravity.END).apply { topMargin = 0; rightMargin = dp(c, 2) })
+            if (t.badge != null) box.addView(text(c, t.badge, 11f, true, WHITE).apply {
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply { cornerRadius = dp(c, 10).toFloat(); setColor(Tokens.WARNING); setStroke(dp(c, 2), CARD) }
+                setPadding(dp(c, 5), 0, dp(c, 5), 0)
+                minWidth = dp(c, 20)
+            }, FrameLayout.LayoutParams(WRAP, dp(c, 20), Gravity.TOP or Gravity.END))
+            col.addView(box, LinearLayout.LayoutParams(dp(c, 56), dp(c, 46)))
+            col.addView(text(c, t.label, 11f, true, MUTED).apply { gravity = Gravity.CENTER; maxLines = 2 }, lp(c, MATCH, WRAP, t = 6))
+            row.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
+        }
+        return row
+    }
+
+    /** Lembar dari bawah (Pilih folder, Teks, Pilih PC). Mengembalikan dialog dan kotak isinya. */
+    fun sheet(a: Activity, title: String, onClose: (() -> Unit)? = null): Pair<android.app.Dialog, LinearLayout> {
+        val c: Context = a
+        val d = android.app.Dialog(a)
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val box = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            val r = dp(c, 24).toFloat()
+            background = GradientDrawable().apply { setColor(CARD); cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f) }
+            setPadding(dp(c, 16), dp(c, 10), dp(c, 16), dp(c, 20))
+        }
+        box.addView(View(c).apply { background = rounded(c, LINE, 4) }, LinearLayout.LayoutParams(dp(c, 40), dp(c, 4)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(c, 8) })
+        val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(c, 44) }
+        head.addView(text(c, title, 20f, true), LinearLayout.LayoutParams(0, WRAP, 1f))
+        head.addView(text(c, "Tutup", 15f, true, ACCENT).apply {
+            minimumHeight = dp(c, 44)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(c, 12), 0, dp(c, 4), 0)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { d.dismiss() }
+        })
+        box.addView(head)
+        d.setContentView(box)
+        d.window?.let { w ->
+            w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            w.setLayout(MATCH, WRAP)
+            w.setGravity(Gravity.BOTTOM)
+        }
+        if (onClose != null) d.setOnDismissListener { onClose() }
+        return d to box
+    }
+
+    /** Baris pengaturan: judul + keterangan kecil di kiri, isi bebas di kanan. */
+    fun settingRow(c: Context, title: String, sub: String? = null, right: View? = null, onClick: (() -> Unit)? = null): LinearLayout {
+        val row = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(c, 60)
+            setPadding(dp(c, 14), dp(c, 10), dp(c, 14), dp(c, 10))
+            if (onClick != null) {
+                isClickable = true
+                isFocusable = true
+                background = ripple(c, CARD, 0)
+                setOnClickListener { onClick() }
+            }
+        }
+        val t = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        t.addView(text(c, title, 15f, true))
+        if (!sub.isNullOrEmpty()) t.addView(text(c, sub, 13f, false, MUTED))
+        row.addView(t, LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (right != null) row.addView(right, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(c, 12) })
+        return row
+    }
+
+    /** Kelompok baris pengaturan dalam satu kartu, dengan garis di antara baris. */
+    fun group(c: Context, rows: List<View>): LinearLayout {
+        val g = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(c, CARD, 18, LINE)
+            clipToOutline = true
+        }
+        rows.forEachIndexed { i, r ->
+            if (i > 0) g.addView(View(c).apply { setBackgroundColor(LINE) }, LinearLayout.LayoutParams(MATCH, dp(c, 1)))
+            g.addView(r, LinearLayout.LayoutParams(MATCH, WRAP))
+        }
+        return g
+    }
+
+    /** Sakelar Android bawaan diwarnai teal. */
+    fun switch(c: Context, on: Boolean, label: String, change: (Boolean) -> Unit): android.widget.Switch =
+        android.widget.Switch(c).apply {
+            isChecked = on
+            contentDescription = label
+            if (Build.VERSION.SDK_INT >= 23) {
+                val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+                thumbTintList = ColorStateList(states, intArrayOf(ACCENT, CARD))
+                trackTintList = ColorStateList(states, intArrayOf(SOFT, LINE2))
+            }
+            setOnCheckedChangeListener { _, v -> change(v) }
+        }
 
     @Suppress("DEPRECATION")
     fun systemBars(a: Activity) {

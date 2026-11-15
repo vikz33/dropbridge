@@ -273,7 +273,7 @@ class BrowseActivity : Activity() {
                 isSelected = on
                 background = if (on) Ui.rounded(c, Ui.FILL, 9) else Ui.ripple(c, Color.TRANSPARENT, 9)
                 setOnClickListener { if (!on) onView(isGrid) }
-                addView(icon(c, ic, if (on) Ui.WHITE else Ui.MUTED, 18), FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), Gravity.CENTER))
+                addView(icon(c, ic, if (on) Ui.ON_FILL else Ui.MUTED, 18), FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), Gravity.CENTER))
             }, LinearLayout.LayoutParams(Ui.dp(c, 42), Ui.dp(c, 36)))
         }
         row.addView(seg)

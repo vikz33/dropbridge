@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -108,7 +109,67 @@ class HostActivity : Activity() {
         builtDark = Ui.dark
         val col = scr.content
 
-        // Saklar utama
+        // ---------- Laptop tujuan (dulu di Pengaturan): status, Ganti, isi manual ----------
+        col.addView(Ui.caption(c, "Laptop").apply { setPadding(Ui.dp(c, 6), 0, 0, Ui.dp(c, 6)) })
+        pcRow = Ui.card(c, pad = 0)
+        val top = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 12))
+        }
+        top.addView(android.widget.FrameLayout(c).apply {
+            background = Ui.rounded(c, Ui.SOFT, 12)
+            addView(IconView(c, Icon.LAPTOP, Ui.ACCENT, 22, 2f), android.widget.FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.CENTER))
+        }, LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)).apply { rightMargin = Ui.dp(c, 12) })
+        pcView = Ui.text(c, "", 14f, false, Ui.INK)
+        top.addView(pcView, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        top.addView(Ui.button(c, "Ganti", Ui.Kind.OUTLINE, 40) {
+            PcPicker.open(this) { Conn.connect(this); refresh() }
+        }.apply { textSize = 14f }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { leftMargin = Ui.dp(c, 8) })
+        pcRow.addView(top)
+        pcRow.addView(View(c).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 1)))
+        // Isi manual dilipat: hanya bila laptop tidak ketemu otomatis
+        val manual = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(c, 14), 0, Ui.dp(c, 14), Ui.dp(c, 14))
+            visibility = View.GONE
+        }
+        val manChev = IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f).apply { rotation = 90f }
+        val manRow = Ui.settingRow(c, "Isi alamat manual", "Bila laptop tidak ketemu otomatis", manChev) {
+            val open = manual.visibility != View.VISIBLE
+            manual.visibility = if (open) View.VISIBLE else View.GONE
+            manChev.rotation = if (open) 270f else 90f
+        }
+        pcRow.addView(manRow)
+        manual.addView(Ui.text(c, "PIN", 12f, true, Ui.MUTED))
+        val pinEdit = Ui.input(c, "PIN dari laptop (Pengaturan › PIN)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD, Prefs.pin)
+        manual.addView(pinEdit, Ui.lp(c, t = 4))
+        manual.addView(Ui.text(c, "Alamat laptop (opsional)", 12f, true, Ui.MUTED), Ui.lp(c, t = 10))
+        val addrEdit = Ui.input(c, "mis. 192.168.1.19", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, Prefs.server.removePrefix("http://"))
+        manual.addView(addrEdit, Ui.lp(c, t = 4))
+        manual.addView(Ui.text(c, if (Prefs.remoteServer.isNotEmpty())
+            "Dari luar jaringan: ${Prefs.remoteServer} (Tailscale), dipakai sendiri bila Wi-Fi laptop tidak terjangkau."
+        else
+            "Dari luar jaringan: pasang Tailscale di laptop dan HP (akun sama), lalu sambungkan sekali lewat Wi-Fi.", 12f, false, Ui.MUTED), Ui.lp(c, t = 8))
+        manual.addView(Ui.button(c, "Sambungkan", Ui.Kind.PRIMARY, 48) {
+            val pin = pinEdit.text.toString().trim()
+            val addr = addrEdit.text.toString().trim()
+            val newAddr = if (addr.isNotEmpty()) Conn.normalize(addr) else ""
+            if (newAddr.isNotEmpty() && newAddr != Prefs.server) {
+                // Alamat lain = bisa jadi laptop lain: simpan yang lama di daftar, mulai yang baru
+                Pcs.saveActive()
+                Prefs.pcId = ""; Prefs.pcOs = ""; Prefs.pcName = ""; Prefs.token = ""; Prefs.remoteServer = ""
+                Prefs.server = newAddr
+            }
+            if (pin.isNotEmpty() && pin != Prefs.pin) { Prefs.pin = pin; Prefs.token = "" }
+            Toast.makeText(this, "Menyambungkan...", Toast.LENGTH_SHORT).show()
+            Conn.connect(this, rescan = addr.isEmpty()) { addrEdit.setText(it.removePrefix("http://")) }
+        }, Ui.lp(c, t = 12))
+        pcRow.addView(manual)
+        col.addView(pcRow, Ui.lp(c, b = 16))
+
+        // ---------- HP lain ----------
+        col.addView(Ui.caption(c, "HP lain").apply { setPadding(Ui.dp(c, 6), 0, 0, Ui.dp(c, 6)) })
         val sw = Ui.card(c)
         val swRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val swText = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
@@ -220,21 +281,6 @@ class HostActivity : Activity() {
         recvCard.addView(ob, Ui.lp(c, t = 10))
         col.addView(recvCard, Ui.lp(c, t = 12))
 
-        // PC
-        pcRow = LinearLayout(c).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = Ui.ripple(c, Ui.CARD, 16, Ui.LINE)
-            setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 10), Ui.dp(c, 12))
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { startActivity(Intent(c, MoreActivity::class.java)) }
-        }
-        pcRow.addView(IconView(c, Icon.PC, Ui.ACCENT, 22, 2f))
-        pcView = Ui.text(c, "", 14f, false, Ui.INK).apply { setPadding(Ui.dp(c, 12), 0, Ui.dp(c, 8), 0) }
-        pcRow.addView(pcView, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-        pcRow.addView(IconView(c, Icon.BACK, Ui.MUTED, 16, 2.2f).apply { rotation = 180f })
-        col.addView(pcRow, Ui.lp(c, t = 12))
 
         if (savedInstanceState == null) {
             intent.getStringArrayListExtra("files")?.let { pendingFiles.addAll(it) }
@@ -409,7 +455,19 @@ class HostActivity : Activity() {
 
         val line = Status.line
         val pcn = Prefs.pcName.ifEmpty { Prefs.server.removePrefix("http://") }
-        pcView.text = if (line.startsWith("Tersambung")) "PC: $pcn · " + (if (Net.viaRemote) "lewat internet (Tailscale)" else "Wi-Fi lokal, tanpa internet") else "PC belum tersambung · ketuk untuk pengaturan"
+        val pcText = when {
+            line.startsWith("Tersambung") -> "$pcn${if (Prefs.pcOs.isNotEmpty()) " · " + Prefs.pcOs else ""}\n" + (if (Net.viaRemote) "Lewat internet (Tailscale)" else "Wi-Fi yang sama") + (if (Prefs.role == "send") " · hanya kirim" else " · akses penuh")
+            line == Net.PENDING -> "$pcn\nMenunggu izin. Tekan Izinkan di laptop."
+            Prefs.pin.isEmpty() -> "Belum tersambung\nKetuk Ganti untuk memilih laptop"
+            else -> "$pcn\nTidak terjangkau"
+        }
+        if (pcView.text.toString() != pcText) {
+            val sp = android.text.SpannableString(pcText)
+            val nl = pcText.indexOf('\n')
+            sp.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, nl, 0)
+            sp.setSpan(android.text.style.ForegroundColorSpan(Ui.MUTED), nl, pcText.length, 0)
+            pcView.text = sp
+        }
         Ui.setChip(scr.chip, "")
 
         if (srv == null) {

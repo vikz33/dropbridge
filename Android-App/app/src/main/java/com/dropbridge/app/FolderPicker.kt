@@ -15,111 +15,109 @@ import android.widget.Toast
 /** Panel "Pilih folder tujuan" (masuk subfolder, buat folder baru, pilih). Dipakai tab Kirim dan layar Bagikan. */
 object FolderPicker {
 
+    /** Tulisan di kolom folder untuk tujuan langsung di folder penyimpanan PC. */
+    const val ROOT = "Tanpa folder"
+    fun isRoot(t: String) = t.trim().equals(ROOT, ignoreCase = true)
+
     /**
-     * Lembar dari bawah: jejak lokasi, daftar subfolder, Folder baru di sini, Pilih.
-     * [current] = folder yang sedang tertulis (panel mulai dari sana); [onPick] menerima jalur terpilih.
+     * Lembar dari bawah. Tingkat atas: "Terakhir dipakai" (langsung terpilih saat diketuk), lalu "Semua folder"
+     * dengan "Tanpa folder" paling atas. Masuk ke folder untuk memilih subfolder. Bawah: Folder baru + Pilih.
+     * [current] = isi kolom folder sekarang; [onPick] menerima jalur terpilih ("Tanpa folder" untuk tujuan langsung).
      */
     fun open(act: Activity, current: String, onPick: (String) -> Unit) {
         val c: Context = act
         var pickPath = ""
         var tree: List<FolderInfo> = emptyList()
-        val d = android.app.Dialog(act)
-        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(c).apply {
-            orientation = LinearLayout.VERTICAL
-            val r = Ui.dp(c, 24).toFloat()
-            background = android.graphics.drawable.GradientDrawable().apply { setColor(Ui.CARD); cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f) }
-            setPadding(Ui.dp(c, 16), Ui.dp(c, 10), Ui.dp(c, 16), Ui.dp(c, 20))
-        }
-        box.addView(View(c).apply { background = Ui.rounded(c, Ui.LINE, 4) }, LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 4)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = Ui.dp(c, 8) })
-        val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val up = android.widget.FrameLayout(c).apply {
+        var rootCount = -1
+        val (d, box) = Ui.sheet(act, "Pilih folder tujuan")
+        val crumbs = Ui.text(c, "", 13f, true, Ui.ACCENT).apply {
+            setPadding(Ui.dp(c, 4), 0, 0, Ui.dp(c, 6))
             isClickable = true
-            isFocusable = true
-            contentDescription = "Naik satu tingkat"
-            background = Ui.ripple(c, Ui.CARD, 12)
-            addView(IconView(c, Icon.BACK, Ui.INK, 22, 2.2f), android.widget.FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.CENTER))
+            visibility = View.GONE
         }
-        head.addView(up, LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)))
-        head.addView(Ui.text(c, "Pilih folder tujuan", 18f, true).apply { setPadding(Ui.dp(c, 6), 0, 0, 0) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-        head.addView(Ui.text(c, "Tutup", 14f, true, Ui.ACCENT).apply {
-            minimumHeight = Ui.dp(c, 44)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(Ui.dp(c, 12), 0, Ui.dp(c, 4), 0)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { d.dismiss() }
-        })
-        box.addView(head)
-        val crumbs = Ui.text(c, "", 13f, true, Ui.MUTED).apply { setPadding(Ui.dp(c, 6), Ui.dp(c, 2), 0, Ui.dp(c, 6)) }
         box.addView(crumbs)
         val list = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        box.addView(android.widget.ScrollView(c).apply { addView(list) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 260)))
-        val newBtn = Ui.iconButton(c, Icon.FOLDER_PLUS, "Folder baru di sini", Ui.Kind.OUTLINE, 48) {}
-        box.addView(newBtn, Ui.lp(c, t = 8))
+        val h = (c.resources.displayMetrics.heightPixels * 0.5f).toInt()
+        box.addView(android.widget.ScrollView(c).apply { addView(list) }, LinearLayout.LayoutParams(Ui.MATCH, h))
+        val foot = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        val newBtn = Ui.iconButton(c, Icon.FOLDER_PLUS, "Folder baru", Ui.Kind.OUTLINE, 52) {}
         val ok = Ui.button(c, "Pilih", Ui.Kind.PRIMARY, 52) {}
-        box.addView(ok, Ui.lp(c, t = 8))
+        foot.addView(newBtn, LinearLayout.LayoutParams(0, Ui.WRAP, 1.2f))
+        foot.addView(ok, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.dp(c, 10) })
+        box.addView(foot, Ui.lp(c, t = 10))
+
+        fun choose(p: String) { onPick(p); d.dismiss() }
+
+        fun row(title: String, sub: String, mono: Boolean, root: Boolean, chev: Boolean, sel: Boolean, click: () -> Unit): View {
+            val r = LinearLayout(c).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = Ui.dp(c, 60)
+                isClickable = true
+                isFocusable = true
+                background = Ui.ripple(c, if (sel) Ui.SOFT else Ui.CARD, 12)
+                setPadding(Ui.dp(c, 10), 0, Ui.dp(c, 8), 0)
+                contentDescription = "$title, $sub"
+                setOnClickListener { click() }
+            }
+            r.addView(android.widget.FrameLayout(c).apply {
+                background = Ui.rounded(c, Ui.FIELD, 12)
+                addView(IconView(c, Icon.FOLDER, if (root) Ui.MUTED else Ui.ACCENT, 20, 2f), android.widget.FrameLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 40)).apply { rightMargin = Ui.dp(c, 12) })
+            val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+            col.addView(Ui.text(c, title, 15f, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; if (mono) Ui.mono(this) })
+            col.addView(Ui.text(c, sub, 12f, false, Ui.MUTED))
+            r.addView(col, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            if (chev) r.addView(IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f))
+            return r
+        }
+        fun cap(t: String) = Ui.caption(c, t).apply { setPadding(Ui.dp(c, 4), Ui.dp(c, 10), 0, Ui.dp(c, 4)) }
+        val isNum = Regex("\\d{3}")
+        fun meta(f: FolderInfo) = (if (f.subs > 0) "${f.subs} folder · " else "") + "${f.count} file"
 
         fun render() {
-            up.visibility = if (pickPath.isEmpty()) View.INVISIBLE else View.VISIBLE
-            crumbs.text = if (pickPath.isEmpty()) "File" else "File › " + pathLabel(pickPath)
             list.removeAllViews()
-            val kids = tree.filter { it.parent == pickPath }.sortedBy { it.label.lowercase() }
-            if (kids.isEmpty()) {
-                list.addView(Ui.text(c, if (pickPath.isEmpty()) "Belum ada folder." else "Belum ada subfolder di sini.", 14f, false, Ui.MUTED).apply {
-                    gravity = Gravity.CENTER; setPadding(0, Ui.dp(c, 20), 0, Ui.dp(c, 20))
-                }, Ui.lp(c))
-            }
-            kids.forEachIndexed { i, f ->
-                if (i > 0) list.addView(View(c).apply { setBackgroundColor(Ui.DIVIDER) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 1)))
-                val row = LinearLayout(c).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    minimumHeight = Ui.dp(c, 58)
-                    isClickable = true
-                    isFocusable = true
-                    background = Ui.ripple(c, Ui.CARD, 12)
-                    setPadding(Ui.dp(c, 4), 0, Ui.dp(c, 4), 0)
-                    contentDescription = "Buka ${f.label}"
+            crumbs.visibility = if (pickPath.isEmpty()) View.GONE else View.VISIBLE
+            crumbs.text = "‹ Semua folder › " + pathLabel(pickPath)
+            val cur = current.trim()
+            if (pickPath.isEmpty()) {
+                val recent = Prefs.recentTargets.mapNotNull { p -> tree.firstOrNull { it.name.equals(p, true) } }.take(3)
+                if (recent.isNotEmpty()) {
+                    list.addView(cap("Terakhir dipakai"))
+                    for (f in recent) list.addView(row(pathLabel(f.name), meta(f), isNum.containsMatchIn(f.name), false, false, f.name.equals(cur, true)) { choose(f.name) }, Ui.lp(c))
                 }
-                row.addView(android.widget.FrameLayout(c).apply {
-                    background = Ui.rounded(c, Ui.SOFT2, 11)
-                    addView(IconView(c, Icon.FOLDER, Ui.ACCENT, 18, 2f), android.widget.FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), Gravity.CENTER))
-                }, LinearLayout.LayoutParams(Ui.dp(c, 38), Ui.dp(c, 38)).apply { rightMargin = Ui.dp(c, 12) })
-                val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-                col.addView(Ui.text(c, f.label, 15f, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
-                col.addView(Ui.text(c, (if (f.subs > 0) "${f.subs} folder · " else "") + "${f.count} file", 12f, false, Ui.MUTED))
-                row.addView(col, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-                row.addView(IconView(c, Icon.BACK, Ui.MUTED, 16, 2.2f).apply { rotation = 180f })
-                row.setOnClickListener { pickPath = f.name; render() }
-                list.addView(row, Ui.lp(c))
+                list.addView(cap("Semua folder"))
+                list.addView(row(ROOT, "Langsung di folder penyimpanan" + if (rootCount > 0) " · $rootCount file" else "", false, true, false, isRoot(cur)) { choose(ROOT) }, Ui.lp(c))
             }
+            val kids = tree.filter { it.parent == pickPath }.sortedBy { it.label.lowercase() }
+            if (kids.isEmpty() && pickPath.isNotEmpty()) {
+                list.addView(Ui.text(c, "Belum ada subfolder di sini.", 14f, false, Ui.MUTED).apply { gravity = Gravity.CENTER; setPadding(0, Ui.dp(c, 20), 0, Ui.dp(c, 20)) }, Ui.lp(c))
+            }
+            for (f in kids) list.addView(row(f.label, meta(f), isNum.containsMatchIn(f.label), false, true, false) { pickPath = f.name; render() }, Ui.lp(c))
             val depth = if (pickPath.isEmpty()) 0 else pickPath.count { it == '/' } + 1
             newBtn.visibility = if (depth >= MAX_DEPTH) View.GONE else View.VISIBLE
             ok.visibility = if (pickPath.isEmpty()) View.GONE else View.VISIBLE
             (ok as? TextView)?.text = "Pilih " + pickPath.substringAfterLast('/')
             ok.contentDescription = "Pilih " + pathLabel(pickPath)
         }
-        up.setOnClickListener { pickPath = if (pickPath.contains('/')) pickPath.substringBeforeLast('/') else ""; render() }
-        ok.setOnClickListener { if (pickPath.isNotEmpty()) { onPick(pickPath); d.dismiss() } }
-        newBtn.setOnClickListener {
-            askNew(act, pickPath) { made -> onPick(made); d.dismiss() }
-        }
+        crumbs.setOnClickListener { pickPath = if (pickPath.contains('/')) pickPath.substringBeforeLast('/') else ""; render() }
+        ok.setOnClickListener { if (pickPath.isNotEmpty()) choose(pickPath) }
+        newBtn.setOnClickListener { askNew(act, pickPath) { made -> choose(made) } }
 
-        // Mulai dari folder tujuan sekarang bila sudah ada di PC
-        val cur = current
         list.addView(Ui.text(c, "Memuat folder dari PC...", 14f, false, Ui.MUTED).apply { gravity = Gravity.CENTER; setPadding(0, Ui.dp(c, 20), 0, 0) }, Ui.lp(c))
-        crumbs.text = "File"
         ok.visibility = View.GONE
         Thread {
             try {
                 val base = Net.ensureServer() ?: throw java.io.IOException("PC tidak terjangkau")
                 val token = Net.ensureToken(base)
                 val t = Net.folderTree(base, token)
+                val rc = try { Net.getJson(base, token, "/api/folders").optJSONObject("root")?.optInt("count") ?: 0 } catch (e: Exception) { 0 }
                 act.runOnUiThread {
                     tree = t
-                    val hit = t.firstOrNull { it.name.equals(cur, true) }
-                    pickPath = hit?.name ?: t.firstOrNull { cur.contains('/') && it.name.equals(cur.substringBeforeLast('/'), true) }?.name ?: ""
+                    rootCount = rc
+                    // Masuk ke folder tujuan sekarang bila folder itu punya subfolder; selain itu mulai dari atas
+                    val hit = t.firstOrNull { it.name.equals(current.trim(), true) }
+                    pickPath = if (hit != null && t.any { it.parent == hit.name }) hit.name else ""
                     render()
                 }
             } catch (e: Exception) {
@@ -132,13 +130,6 @@ object FolderPicker {
                 }
             }
         }.start()
-
-        d.setContentView(box)
-        d.window?.apply {
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
-            setGravity(Gravity.BOTTOM)
-        }
         d.show()
     }
 

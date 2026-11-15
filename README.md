@@ -7,7 +7,9 @@ tanpa memasang aplikasi di HP. Cukup browser.
 
 ```
 DropBridge/
-  Web/           tampilan (index.html, app.js, style.css), dipakai PC, browser HP, dan jendela desktop
+  Web/           tampilan (index.html, app.js, style.css, tokens.css, fonts/), dipakai PC, browser HP, dan jendela desktop
+  design/        sistem desain DropBridge 3: tokens.json (satu sumber warna, huruf, jarak), components.md,
+                 build_tokens.py (membuat Web/tokens.css dan Android Tokens.kt, cek kontras)
   PC-App/        server + jendela desktop + bahan installer
                  Windows: start.bat, build_exe.bat · Linux: start.sh, build_deb.sh
   Android-App/   aplikasi Android (build_apk.bat)
@@ -25,12 +27,28 @@ Folder ini hanya berisi kode. Data pribadi disimpan di luar:
 
 | Apa | Di mana |
 |---|---|
-| File kiriman HP | `Documents\DropBridge` (bisa diganti, mis. ke OneDrive kantor, lewat **Ganti** di halaman Kirim) |
+| File kiriman HP | `Documents\DropBridge` (bisa diganti, mis. ke OneDrive kantor, lewat ikon **Folder penyimpanan** di Home laptop atau Pengaturan › Lokasi simpan) |
 | Pengaturan (PIN, folder) | Windows `%LOCALAPPDATA%\DropBridge\config.json` · Linux `~/.local/share/DropBridge/config.json` |
 | Perangkat terhubung, izin, riwayat teks, log | folder `data` di sebelah config.json |
 
 Versi dari kode (`start.bat`) dan versi terpasang (`.exe`) memakai pengaturan yang sama, jadi PIN dan HP
 yang sudah terhubung tidak berbeda.
+
+## DropBridge 3 (PC 3.0.0 · Android 3.0.0)
+
+- **Home bersih**: kartu tujuan (laptop + folder), Foto langsung, Pilih file, lalu baris ikon berlabel kecil:
+  Semua folder, Muat ulang, Teks, Antrean (aplikasi, hanya bila ada), Foto kecil, Tambah perangkat,
+  dan di laptop juga Folder penyimpanan. Riwayat dan chip folder dihapus dari Home.
+- **Pilih folder**: "Terakhir dipakai" di atas, lalu "Semua folder" dengan "Tanpa folder" paling atas.
+- **Teks**: ikon Teks membuka lembar tulis/tempel. HP berakses Penuh melihat semua teks di laptop
+  (asal teks: teal = laptop, indigo = HP), bisa Salin, Pilih sebagian, Hapus dengan Urungkan 30 detik.
+- **Kabar file masuk** di Home laptop: "4 foto masuk dari HONOR Nudis ke TCKU 6177329 › 30-23 · Buka folder".
+- **Pengaturan** dengan urutan yang sama di semua tempat: Perangkat ini, Pengiriman (aplikasi), Laptop ini
+  (laptop: notifikasi, izin HP baru, PIN, lokasi simpan), Tentang (versi), Keluar. Kecilkan foto hanya di Home.
+  Di aplikasi Android, PIN dan alamat manual pindah ke tab Hubungkan › Laptop.
+- **Sistem desain**: warna dan huruf dari `design/tokens.json`. Huruf Plus Jakarta Sans dan IBM Plex Mono
+  (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
+  `python design/build_tokens.py`.
 
 ## Cara pakai
 
@@ -188,7 +206,7 @@ Ubah lalu jalankan ulang DropBridge (tray > Berhenti, lalu buka lagi).
 ## Struktur dan cara mengembangkan
 
 ```
-Web/                   index.html, app.js, style.css
+Web/                   index.html, app.js, style.css, tokens.css (dibuat dari design/tokens.json), fonts/
 Android-App/           proyek Android (Kotlin), build_apk.bat
 PC-App/
   start.bat            jalankan dari kode ("start.bat konsol" = jendela hitam)
@@ -207,12 +225,13 @@ PC-App/
     config.py          membaca %LOCALAPPDATA%\DropBridge\config.json, letak folder Web dan Rilis
     discovery.py       membalas pencarian PC dari aplikasi Android (UDP 47800)
     events.py          kabar dari server ke jendela desktop (file masuk, munculkan jendela)
+    inbox.py           kabar "file masuk" untuk Home laptop (/api/files/incoming)
     icon.py            logo DropBridge sebagai gambar (tray dan .exe)
     version.py         nomor versi PC
     routes/
       folders.py       /api/folders (daftar, buat, ganti nama, hapus, ZIP)
       files.py         /api/files (daftar, upload, unduh, pindah, thumbnail, hapus)
-      clipboard.py     /api/clips (kirim teks)
+      clipboard.py     /api/clips (teks: kirim, daftar, hapus, kembalikan)
       system.py        khusus PC ini: folder penyimpanan, buka Explorer, Selamat datang, unduh APK
     services/
       storage.py       penyimpanan file (sekarang folder lokal)

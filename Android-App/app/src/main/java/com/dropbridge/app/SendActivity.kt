@@ -361,8 +361,9 @@ class SendActivity : Activity() {
             return
         }
 
-        val folder = cleanPath(folderEdit.text.toString())
         if (uris.isEmpty()) return
+        if (FolderPicker.isRoot(folderEdit.text.toString())) { queueAndFinish(""); return }  // dipilih "Tanpa folder"
+        val folder = cleanPath(folderEdit.text.toString())
         if (folder.count { it == '/' } + 1 > MAX_DEPTH) {
             Toast.makeText(this, "Folder maksimal $MAX_DEPTH tingkat", Toast.LENGTH_SHORT).show()
             return

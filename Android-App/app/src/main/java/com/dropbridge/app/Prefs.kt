@@ -98,6 +98,21 @@ object Prefs {
         get() = get("pcList")
         set(v) = put("pcList", v)
 
+    /** Nama HP ini yang tampil di laptop (kosong = merek + model HP). */
+    var devName: String
+        get() = get("devName")
+        set(v) = put("devName", v)
+
+    /** Folder yang terakhir dipakai HP ini (terbaru di depan), untuk "Terakhir dipakai" di Pilih folder. */
+    var recentTargets: List<String>
+        get() = get("recentTargets").split("\n").filter { it.isNotEmpty() }
+        set(v) = put("recentTargets", v.joinToString("\n"))
+
+    fun rememberTarget(p: String) {
+        if (p.isEmpty()) return
+        recentTargets = (listOf(p) + recentTargets.filter { !it.equals(p, ignoreCase = true) }).take(8)
+    }
+
     /** Daftar folder di PC (disimpan terakhir kali berhasil diambil) untuk saran nama. */
     var folders: List<String>
         get() = get("folders").split("\n").filter { it.isNotEmpty() }

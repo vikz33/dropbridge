@@ -1,131 +1,187 @@
 package com.dropbridge.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
-import android.widget.EditText
+import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
+/**
+ * Pengaturan (ikon di kanan atas). Urutan sama dengan web dan laptop:
+ * Perangkat ini, Pengiriman, Tentang, Keluar. Kecilkan foto ada di Home (ikon Foto kecil);
+ * sambungan ke laptop (Ganti, PIN, alamat manual) ada di tab Hubungkan.
+ */
 class MoreActivity : Activity() {
-    private lateinit var stat: TextView
-    private lateinit var addrEdit: EditText
-    private lateinit var pinEdit: EditText
-
-    private fun switchRow(c: Context, title: String, sub: String, on: Boolean, change: (Boolean) -> Unit): LinearLayout {
-        val row = LinearLayout(c).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val t = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        t.addView(Ui.text(c, title, 15f, true))
-        t.addView(Ui.text(c, sub, 13f, false, Ui.MUTED))
-        row.addView(t, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-        row.addView(Switch(c).apply {
-            isChecked = on
-            contentDescription = title
-            setOnCheckedChangeListener { _, v -> change(v) }
-        }, Ui.lp(c, Ui.WRAP, Ui.WRAP, l = 12))
-        return row
-    }
+    private var builtDark = false
+    private lateinit var nameVal: TextView
+    private lateinit var bgVal: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         val c: Context = this
-        val s = Ui.screen(this, "Pengaturan", null, back = true)
+        val s = Ui.screen(this, "Pengaturan", Net.deviceName(), back = true)
+        builtDark = Ui.dark
         val col = s.content
 
-        // Tampilan: ikut HP, terang, atau gelap
-        val look = Ui.card(c)
-        look.addView(Ui.text(c, "Tampilan", 15f, true))
-        look.addView(Ui.text(c, "Mode gelap lebih nyaman di malam hari dan hemat baterai di layar AMOLED.", 13f, false, Ui.MUTED))
+        fun section(title: String, body: View, top: Int = 16) {
+            col.addView(Ui.caption(c, title).apply { setPadding(Ui.dp(c, 6), 0, 0, Ui.dp(c, 6)) }, Ui.lp(c, t = top))
+            col.addView(body, Ui.lp(c))
+        }
+
+        // ---------- Perangkat ini ----------
+        nameVal = Ui.text(c, Net.deviceName(), 14f, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; maxWidth = Ui.dp(c, 160) }
+        val nameRight = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        nameRight.addView(nameVal)
+        nameRight.addView(IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f), Ui.lp(c, Ui.WRAP, Ui.WRAP, l = 6))
+        val nameRow = Ui.settingRow(c, "Nama perangkat", "Terlihat di laptop saat minta izin", nameRight) { askName() }
+
+        val lookRow = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 14))
+        }
+        lookRow.addView(Ui.text(c, "Tampilan", 15f, true))
         val seg = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
-            background = Ui.rounded(c, Ui.FIELD, 14, Ui.LINE)
+            background = Ui.rounded(c, Ui.FIELD, 12)
             setPadding(Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4))
         }
         for ((key, label) in listOf("system" to "Ikuti HP", "light" to "Terang", "dark" to "Gelap")) {
             val on = Prefs.theme == key
-            seg.addView(Ui.text(c, label, 14f, true, if (on) Ui.WHITE else Ui.MUTED).apply {
+            seg.addView(Ui.text(c, label, 13f, true, if (on) Ui.INK else Ui.MUTED).apply {
                 gravity = Gravity.CENTER
-                minimumHeight = Ui.dp(c, 42)
+                minimumHeight = Ui.dp(c, 38)
                 isClickable = true
                 isFocusable = true
                 contentDescription = "Tampilan $label" + if (on) ", dipilih" else ""
-                background = if (on) Ui.rounded(c, Ui.FILL, 11) else null
+                background = if (on) Ui.rounded(c, Ui.CARD, 9, Ui.LINE) else null
                 setOnClickListener { if (!on) { Prefs.theme = key; recreate() } }
             }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         }
-        look.addView(seg, Ui.lp(c, t = 12))
-        col.addView(look, Ui.lp(c, b = 12))
+        lookRow.addView(seg, Ui.lp(c, t = 10))
+        section("Perangkat ini", Ui.group(c, listOf(nameRow, lookRow)), top = 4)
 
-        val photo = Ui.card(c)
-        photo.addView(switchRow(c, "Kecilkan foto ≤ 512 KB", "Hemat kuota dan lebih cepat. Matikan untuk resolusi penuh, mis. foto liburan.", Prefs.shrinkPhotos) { on ->
-            Prefs.shrinkPhotos = on
-        })
-        col.addView(photo, Ui.lp(c, b = 12))
+        // ---------- Pengiriman ----------
+        val autoRow = Ui.settingRow(c, "Kirim otomatis", "Antrean dikirim sendiri saat laptop kembali terjangkau",
+            Ui.switch(c, Prefs.autoSend, "Kirim otomatis") { on ->
+                Prefs.autoSend = on
+                if (on) AutoSend.schedule(this) else AutoSend.cancel(this)
+            })
+        val mobileRow = Ui.settingRow(c, "Boleh pakai data seluler", "Mati: hanya kirim lewat Wi-Fi",
+            Ui.switch(c, Prefs.allowMobile, "Boleh pakai data seluler") { on ->
+                Prefs.allowMobile = on
+                AutoSend.cancel(this)
+                AutoSend.schedule(this)
+            })
+        bgVal = Ui.text(c, "", 13f, true, Ui.OK)
+        val bgRow = Ui.settingRow(c, "Jalan di latar belakang", null, IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f)) { openBatterySettings() }
+        ((bgRow.getChildAt(0) as LinearLayout)).addView(bgVal)
+        section("Pengiriman", Ui.group(c, listOf(autoRow, mobileRow, bgRow)))
 
-        val auto = Ui.card(c)
-        auto.addView(switchRow(c, "Kirim otomatis", "Antrean terkirim sendiri saat HP tersambung Wi-Fi yang ada PC-nya", Prefs.autoSend) { on ->
-            Prefs.autoSend = on
-            if (on) AutoSend.schedule(this) else AutoSend.cancel(this)
-        })
-        auto.addView(switchRow(c, "Boleh pakai data seluler", "Lewat Tailscale saat tidak satu Wi-Fi dengan PC, mis. dari gudang. Pakai kuota.", Prefs.allowMobile) { on ->
-            Prefs.allowMobile = on
-            AutoSend.cancel(this)
-            AutoSend.schedule(this)
-        }, Ui.lp(c, t = 8))
-        auto.addView(Ui.button(c, "Izinkan jalan di latar belakang", Ui.Kind.OUTLINE, 44) { openBatterySettings() }, Ui.lp(c, t = 12))
-        auto.addView(Ui.text(c, "Disarankan di Huawei dan HP lain yang agresif menghemat baterai, supaya pengiriman otomatis tidak dimatikan.", 12f, false, Ui.MUTED), Ui.lp(c, t = 8))
-        col.addView(auto, Ui.lp(c))
-
-        val conn = Ui.card(c)
-        conn.addView(Ui.caption(c, "Sambungan ke PC"))
-        stat = Ui.text(c, "", 13f, true, Ui.DEEP)
-        conn.addView(stat, Ui.lp(c, t = 6))
-        conn.addView(Ui.text(c, "Buka start.bat di PC, lihat PIN di jendela hitam. Alamat PC dicari otomatis; isi manual hanya jika tidak ketemu.", 13f, false, Ui.MUTED), Ui.lp(c, t = 6))
-        conn.addView(Ui.text(c, "PIN", 12f, true, Ui.MUTED), Ui.lp(c, t = 12))
-        pinEdit = Ui.input(c, "PIN dari layar PC", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD, Prefs.pin)
-        conn.addView(pinEdit, Ui.lp(c, t = 4))
-        conn.addView(Ui.text(c, if (Prefs.remoteServer.isNotEmpty())
-            "Dari luar jaringan: ${Prefs.remoteServer} (Tailscale). Dipakai otomatis bila Wi-Fi PC tidak terjangkau; nyalakan Tailscale di HP."
-        else
-            "Dari luar jaringan: belum ada. Pasang Tailscale di PC dan HP (akun sama), lalu sambungkan sekali lewat Wi-Fi.", 12f, false, Ui.MUTED), Ui.lp(c, t = 10))
-        conn.addView(Ui.text(c, "Alamat PC (opsional)", 12f, true, Ui.MUTED), Ui.lp(c, t = 10))
-        addrEdit = Ui.input(c, "mis. dropbridge.local atau 192.168.1.19", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, Prefs.server)
-        conn.addView(addrEdit, Ui.lp(c, t = 4))
-        conn.addView(Ui.button(c, "Sambungkan / cari PC", Ui.Kind.PRIMARY, 48) {
-            val pin = pinEdit.text.toString().trim()
-            val addr = addrEdit.text.toString().trim()
-            val newAddr = if (addr.isNotEmpty()) Conn.normalize(addr) else ""
-            if (newAddr.isNotEmpty() && newAddr != Prefs.server) {
-                // Alamat lain = bisa jadi PC lain: simpan PC lama di daftar, mulai PC baru
-                Pcs.saveActive()
-                Prefs.pcId = ""; Prefs.pcOs = ""; Prefs.pcName = ""; Prefs.token = ""; Prefs.remoteServer = ""
-                Prefs.server = newAddr
+        // ---------- Tentang: versi tiap bagian ----------
+        val appV = Ui.appVersion(c)
+        val pcV = Prefs.pcVersion
+        fun verRow(icon: Int, title: String, sub: String, ver: String): View {
+            val r = LinearLayout(c).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = Ui.dp(c, 64)
+                setPadding(Ui.dp(c, 14), Ui.dp(c, 10), Ui.dp(c, 14), Ui.dp(c, 10))
             }
-            if (pin.isNotEmpty() && pin != Prefs.pin) { Prefs.pin = pin; Prefs.token = "" }
-            Conn.connect(this, rescan = addr.isEmpty()) { addrEdit.setText(it) }
-        }, Ui.lp(c, t = 14))
-        col.addView(conn, Ui.lp(c, t = 12))
+            r.addView(FrameLayout(c).apply {
+                background = Ui.rounded(c, Ui.SOFT, 12)
+                addView(IconView(c, icon, Ui.ACCENT, 20, 2f), FrameLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 40)).apply { rightMargin = Ui.dp(c, 12) })
+            val t = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+            t.addView(Ui.text(c, title, 15f, true))
+            t.addView(Ui.text(c, sub, 13f, false, Ui.MUTED))
+            r.addView(t, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            r.addView(Ui.mono(Ui.text(c, ver.ifEmpty { "?" }, 15f, false, Ui.INK)))
+            return r
+        }
+        val pcName = Prefs.pcName.ifEmpty { "belum tersambung" }
+        val rows = arrayListOf(
+            verRow(Icon.PHONE, "Aplikasi HP", "DropBridge Android", appV),
+            verRow(Icon.LAPTOP, "Laptop · $pcName", Prefs.pcOs.ifEmpty { "Versi diketahui setelah tersambung" }, pcV),
+        )
+        if (pcV.isNotEmpty()) {
+            val bad = Ui.versionMismatch(appV, pcV)
+            val pill = Ui.text(c, if (bad) "Versi beda. Perbarui yang lebih lama." else "✓  Versi cocok", 12f, true, if (bad) Ui.WARN_TX else Ui.DEEP).apply {
+                background = Ui.rounded(c, if (bad) Ui.WARN_BG else Ui.SOFT, 999)
+                setPadding(Ui.dp(c, 12), Ui.dp(c, 5), Ui.dp(c, 12), Ui.dp(c, 5))
+            }
+            rows.add(LinearLayout(c).apply {
+                setPadding(Ui.dp(c, 14), Ui.dp(c, 10), Ui.dp(c, 14), Ui.dp(c, 12))
+                addView(pill)
+            })
+        }
+        section("Tentang", Ui.group(c, rows))
 
-        // Versi, supaya tidak tertukar APK lama dan baru
-        val pv = Prefs.pcVersion
-        col.addView(Ui.text(c, "DropBridge Android versi ${Ui.appVersion(c)}" + if (pv.isNotEmpty()) " · PC versi $pv" else "", 12f, false, Ui.MUTED).apply {
-            gravity = Gravity.CENTER
-        }, Ui.lp(c, t = 16))
+        // ---------- Keluar ----------
+        if (Prefs.pin.isNotEmpty() || Prefs.token.isNotEmpty()) {
+            col.addView(Ui.button(c, "Keluar dari ${Prefs.pcName.ifEmpty { "laptop" }}", Ui.Kind.OUTLINE, 52) { askLogout() }.apply {
+                setTextColor(Ui.DANGER)
+                background = Ui.ripple(c, Ui.CARD, 12, Tokens.DANGER_SOFT)
+            }, Ui.lp(c, t = 20))
+        }
+    }
 
+    private fun askName() {
+        val c: Context = this
+        val box = Ui.input(c, "Mis. HP Budi", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS, Net.deviceName())
+        val wrap = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(c, 20), Ui.dp(c, 4), Ui.dp(c, 20), 0)
+            addView(box, LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP))
+        }
+        AlertDialog.Builder(this).setTitle("Nama perangkat").setView(wrap)
+            .setPositiveButton("Simpan") { _, _ ->
+                val name = box.text.toString().trim().take(40)
+                Prefs.devName = name
+                nameVal.text = Net.deviceName()
+                Thread {
+                    try {
+                        val base = Net.ensureServer() ?: return@Thread
+                        Net.rename(base, Net.ensureToken(base), Net.deviceName())
+                    } catch (e: Exception) { /* nama tetap tersimpan di HP; dikirim saat login berikutnya */ }
+                }.start()
+            }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun askLogout() {
+        val pc = Prefs.pcName.ifEmpty { "laptop" }
+        AlertDialog.Builder(this)
+            .setTitle("Keluar dari $pc?")
+            .setMessage("Untuk mengirim lagi, perlu PIN dari laptop (dan izin bila diminta). Antrean di HP tetap tersimpan.")
+            .setPositiveButton("Keluar") { _, _ ->
+                val base = Net.current.ifEmpty { Prefs.server }
+                val token = Prefs.token
+                Thread { if (base.isNotEmpty() && token.isNotEmpty()) Net.logout(base, token) }.start()
+                Pcs.forgetLogin()  // PIN juga dilupakan di daftar PC, jadi masuk lagi perlu PIN
+                Prefs.token = ""
+                Prefs.pin = ""
+                Status.line = "Keluar dari $pc. Ketuk Ganti untuk menyambungkan lagi."
+                Toast.makeText(this, "Keluar dari $pc", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            .setNegativeButton("Batal", null).show()
     }
 
     override fun onResume() {
         super.onResume()
-        stat.text = Status.line.ifEmpty { "Belum tersambung" }
+        if (Ui.themeStale(this, builtDark)) { recreate(); return }
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val ok = android.os.Build.VERSION.SDK_INT < 23 || pm.isIgnoringBatteryOptimizations(packageName)
+        bgVal.text = if (ok) "Sudah diizinkan" else "Belum diizinkan · disarankan agar kirim otomatis tidak dimatikan"
+        bgVal.setTextColor(if (ok) Ui.OK else Ui.WARN_TX)
     }
 
     private fun openBatterySettings() {

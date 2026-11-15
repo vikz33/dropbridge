@@ -97,7 +97,7 @@ object Uploader {
                     }
                     Xfer.fileDone(cur.size)
                     Queue.remove(cur.id)
-                    if (real.folder.isNotEmpty()) Prefs.lastFolder = real.folder
+                    if (real.folder.isNotEmpty()) { Prefs.lastFolder = real.folder; Prefs.rememberTarget(real.folder) }
                     Status.line = if (real.duplicate) "Sudah ada di PC: ${real.name} → $dest (tidak dikirim ulang)"
                         else "Terkirim: ${cur.name} → $dest"
                 } catch (e: NetError) {

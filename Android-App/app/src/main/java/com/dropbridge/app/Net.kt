@@ -52,6 +52,7 @@ object Net {
 
     /** Nama perangkat untuk daftar di PC, mis. "HUAWEI VOG-L29". */
     fun deviceName(): String {
+        Prefs.devName.let { if (it.isNotEmpty()) return it }
         val m = android.os.Build.MANUFACTURER.orEmpty().replaceFirstChar { it.uppercase() }
         val model = android.os.Build.MODEL.orEmpty()
         return if (model.startsWith(m, ignoreCase = true)) model else "$m $model".trim()
@@ -350,6 +351,42 @@ object Net {
         val body = JSONObject().put("text", text).put("source", "hp").toString()
         val r = request("POST", "$base/api/clips", token, body, 8000)
         if (r.first !in 200..299) throw NetError(r.first, detail(r.second, "Gagal mengirim teks (${r.first})"))
+    }
+
+    // ---------- Teks (daftar hanya untuk HP berakses Penuh) ----------
+    class Clip(val id: String, val text: String, val fromPc: Boolean, val from: String, val ts: Double)
+
+    fun clips(base: String, token: String): List<Clip> {
+        val r = request("GET", "$base/api/clips", token, null, 8000)
+        if (r.first == 403) throw NetError(403, "Hanya kirim")
+        if (r.first != 200) throw NetError(r.first, detail(r.second, "Gagal mengambil teks"))
+        val arr = JSONObject(r.second).getJSONArray("clips")
+        return (0 until arr.length()).map {
+            val o = arr.getJSONObject(it)
+            val src = o.optString("source")
+            Clip(o.getString("id"), o.optString("text"), src == "pc", o.optString("from").ifEmpty { if (src == "pc") "Laptop" else "HP" }, o.optDouble("ts", 0.0))
+        }
+    }
+
+    fun deleteClip(base: String, token: String, id: String) {
+        val r = request("DELETE", "$base/api/clips/$id", token, null, 8000)
+        if (r.first !in 200..299) throw NetError(r.first, detail(r.second, "Gagal menghapus"))
+    }
+
+    fun restoreClip(base: String, token: String, id: String) {
+        val r = request("POST", "$base/api/clips/$id/restore", token, "{}", 8000)
+        if (r.first !in 200..299) throw NetError(r.first, detail(r.second, "Sudah tidak bisa dikembalikan"))
+    }
+
+    /** Ganti nama HP ini di daftar perangkat laptop. */
+    fun rename(base: String, token: String, name: String) {
+        val r = request("POST", "$base/api/device", token, JSONObject().put("name", name).toString(), 8000)
+        if (r.first !in 200..299) throw NetError(r.first, detail(r.second, "Gagal mengganti nama"))
+    }
+
+    /** Keluar dari laptop: token dihapus di laptop; untuk masuk lagi perlu PIN (dan izin bila diminta). */
+    fun logout(base: String, token: String) {
+        try { request("POST", "$base/api/logout", token, "{}", 5000) } catch (e: Exception) { /* tetap keluar di HP */ }
     }
 
     class UploadResult(val folder: String, val name: String, val duplicate: Boolean)

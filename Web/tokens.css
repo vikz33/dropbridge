@@ -1,0 +1,137 @@
+/* Dibuat otomatis oleh design/build_tokens.py dari tokens.json. Jangan diedit langsung. */
+@font-face { font-family: "Plus Jakarta Sans"; font-weight: 500; font-style: normal; font-display: swap; src: url("fonts/jakarta-500.woff2") format("woff2"); }
+@font-face { font-family: "Plus Jakarta Sans"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/jakarta-700.woff2") format("woff2"); }
+@font-face { font-family: "Plus Jakarta Sans"; font-weight: 800; font-style: normal; font-display: swap; src: url("fonts/jakarta-800.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/plexmono-600.woff2") format("woff2"); }
+:root {
+  color-scheme: light dark;
+  --font-ui: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+  --touch: 48px;
+  --touch-lg: 56px;
+  --icon: 22px;
+  --header: 64px;
+  --nav: 72px;
+  --content-max: 1120px;
+  --split: 720px;
+  --type-caption: 600 12px/16px var(--font-ui);
+  --type-small: 500 14px/20px var(--font-ui);
+  --type-body: 500 16px/24px var(--font-ui);
+  --type-label: 700 16px/20px var(--font-ui);
+  --type-title-sm: 700 18px/24px var(--font-ui);
+  --type-title: 800 22px/28px var(--font-ui);
+  --type-display: 800 28px/34px var(--font-ui);
+  --type-code: 600 17px/22px var(--font-code);
+  --motion-fast: 120ms ease-out;
+  --motion-base: 200ms ease-out;
+  --motion-sheet: 260ms cubic-bezier(.2,.8,.2,1);
+  --bg: #F3F6F5;
+  --surface: #FFFFFF;
+  --surface-2: #EAF0EE;
+  --border: #D6E0DD;
+  --border-input: #7E918C;
+  --text: #0E1A18;
+  --text-muted: #4D5E5A;
+  --accent: #0F766E;
+  --on-accent: #FFFFFF;
+  --accent-soft: #DCEFEB;
+  --on-accent-soft: #0A4A44;
+  --guest: #4F46E5;
+  --on-guest: #FFFFFF;
+  --guest-soft: #E6E5FC;
+  --on-guest-soft: #2E2A8C;
+  --success: #15803D;
+  --warning: #9A4A07;
+  --warning-soft: #FFF0D9;
+  --danger: #B42318;
+  --danger-soft: #FDE8E6;
+  --scrim: rgba(14,26,24,.48);
+  --shadow-sm: 0 1px 2px rgba(14,26,24,.06);
+  --shadow-md: 0 10px 28px rgba(14,26,24,.12);
+  --k-image: #6D28D9;
+  --k-video: #BE185D;
+  --k-audio: #C2410C;
+  --k-doc: #1D4ED8;
+  --k-archive: #854D0E;
+  --k-other: #475569;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0B1513;
+    --surface: #13201E;
+    --surface-2: #1B2B28;
+    --border: #263A36;
+    --border-input: #6A827D;
+    --text: #E8F1EF;
+    --text-muted: #A3B6B2;
+    --accent: #3DD6C1;
+    --on-accent: #042420;
+    --accent-soft: #123A35;
+    --on-accent-soft: #BDF3EA;
+    --guest: #A5B4FC;
+    --on-guest: #13154A;
+    --guest-soft: #25285A;
+    --on-guest-soft: #DDE1FF;
+    --success: #4ADE80;
+    --warning: #FBBF24;
+    --warning-soft: #3A2A0A;
+    --danger: #F87171;
+    --danger-soft: #3A1614;
+    --scrim: rgba(0,0,0,.6);
+    --shadow-sm: none;
+    --shadow-md: 0 10px 28px rgba(0,0,0,.45);
+    --k-image: #C4B5FD;
+    --k-video: #F9A8D4;
+    --k-audio: #FDBA74;
+    --k-doc: #93C5FD;
+    --k-archive: #FDE047;
+    --k-other: #CBD5E1;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0B1513;
+  --surface: #13201E;
+  --surface-2: #1B2B28;
+  --border: #263A36;
+  --border-input: #6A827D;
+  --text: #E8F1EF;
+  --text-muted: #A3B6B2;
+  --accent: #3DD6C1;
+  --on-accent: #042420;
+  --accent-soft: #123A35;
+  --on-accent-soft: #BDF3EA;
+  --guest: #A5B4FC;
+  --on-guest: #13154A;
+  --guest-soft: #25285A;
+  --on-guest-soft: #DDE1FF;
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --warning-soft: #3A2A0A;
+  --danger: #F87171;
+  --danger-soft: #3A1614;
+  --scrim: rgba(0,0,0,.6);
+  --shadow-sm: none;
+  --shadow-md: 0 10px 28px rgba(0,0,0,.45);
+  --k-image: #C4B5FD;
+  --k-video: #F9A8D4;
+  --k-audio: #FDBA74;
+  --k-doc: #93C5FD;
+  --k-archive: #FDE047;
+  --k-other: #CBD5E1;
+}
+:root[data-theme="light"] { color-scheme: light; }
+@media (prefers-reduced-motion: reduce) { :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-sheet: 0ms; } }

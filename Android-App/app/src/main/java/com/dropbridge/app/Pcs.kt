@@ -52,6 +52,13 @@ object Pcs {
         write(listOf(cur) + rest)
     }
 
+    /** Keluar dari PC yang sedang dipakai: PIN dan token dilupakan juga di daftar. */
+    @Synchronized
+    fun forgetLogin() {
+        val cur = active()
+        write(all().map { if (same(it, cur)) it.copy(pin = "", token = "") else it })
+    }
+
     /** Pindah ke PC lain: simpan yang sekarang, muat yang dipilih. */
     @Synchronized
     fun switchTo(e: PcEntry) {

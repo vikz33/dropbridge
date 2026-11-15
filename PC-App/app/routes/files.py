@@ -10,8 +10,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.requests import ClientDisconnect
 from pydantic import BaseModel, Field
 
-from .. import events
-from ..auth import require_auth, require_full
+from .. import events, inbox
+from ..auth import require_auth, require_full, sender
 from ..config import settings
 from ..services import thumbs
 from ..services.storage import guess_mime, is_inline_safe, storage, trash_label
@@ -30,6 +30,15 @@ def list_files(folder: str = ""):
 def recent_files(limit: int = 8):
     """File yang paling baru masuk, dari semua folder."""
     return {"files": storage.recent_files(max(1, min(limit, 50)))}
+
+
+@router.get("/incoming", dependencies=[Depends(require_full)])
+def incoming(since: int = -1):
+    """Kabar file masuk sejak nomor `since` (-1 = hanya nomor terakhir, tanpa kabar lama)."""
+    got = inbox.since(max(since, 0))
+    if since < 0:
+        got["batches"] = []
+    return got
 
 
 @router.get("/upload-offset")
@@ -132,6 +141,7 @@ async def upload_raw(
         storage.set_mtime(folder_name, final, last_modified)
     if not dup:
         events.emit("file", folder_name, final)
+        inbox.add(folder_name, final, sender(request))
     took = time.monotonic() - t0
     sent = size - offset
     note = " (sudah ada, tidak disimpan ulang)" if dup else ""
@@ -146,6 +156,7 @@ async def upload_raw(
 
 @router.post("/upload")
 async def upload(
+    request: Request,
     folder: str = "",
     files: list[UploadFile] = File(...),
     last_modified: Optional[int] = Form(None),
@@ -178,6 +189,7 @@ async def upload(
             storage.set_mtime(folder_name, final, last_modified)
         if not dup:
             events.emit("file", folder_name, final)
+            inbox.add(folder_name, final, sender(request))
         saved.append({"name": final, "size": size, "duplicate": dup})
     if errors and not saved:
         raise HTTPException(status_code=413, detail=errors[0])

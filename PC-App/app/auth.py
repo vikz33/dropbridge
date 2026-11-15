@@ -217,6 +217,16 @@ def require_full(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Perangkat ini hanya boleh mengirim file.")
 
 
+def sender(request: Request) -> dict:
+    """Siapa yang mengirim: nama perangkat dan jenisnya ("pc" untuk laptop ini, "hp" untuk yang lain)."""
+    token = _token_from(request)
+    s = _sessions.get(token) if token else None
+    if not s:
+        return {"name": "", "dev": "hp"}
+    local = bool(s.get("local"))
+    return {"name": s.get("name") or ("Laptop ini" if local else s.get("kind", "")), "dev": "pc" if local else "hp"}
+
+
 def _current(request: Request) -> dict:
     token = _token_from(request)
     s = _sessions.get(token) if token else None
@@ -305,7 +315,9 @@ def session(request: Request):
     s = _current(request)
     left = max(0, int(PENDING_SECONDS - (time.time() - s["created"]))) if s["status"] == "pending" else 0
     return {"ok": True, "name": s["name"], "kind": s["kind"], "local": s["local"],
-            "pending": s["status"] == "pending", "wait": left, "role": s["role"]}
+            "pending": s["status"] == "pending", "wait": left, "role": s["role"],
+            # PIN hanya ditunjukkan ke laptop ini sendiri (Pengaturan > Laptop ini)
+            "pin": settings.pin if s["local"] and is_this_pc(request) else None}
 
 
 class DeviceIn(BaseModel):
