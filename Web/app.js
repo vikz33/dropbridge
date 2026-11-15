@@ -668,10 +668,11 @@
     list.replaceChildren();
     // Tanpa pencarian: folder tingkat atas saja. Dengan pencarian: semua tingkat, tampil jalur lengkap.
     const shown = sortBy(folders.filter((x) => (q ? x.name.toLowerCase().includes(q) : !x.parent)), pref.folderSort);
-    for (const f of shown) list.append(folderItem(f, !!q));
+    // "Tanpa folder" selalu paling atas, apa pun urutannya
     if (rootInfo.count > 0 && (!q || 'tanpa folder'.includes(q))) {
       list.append(folderItem({ name: 'Tanpa folder', root: true, count: rootInfo.count, size: rootInfo.size, modified: rootInfo.modified }));
     }
+    for (const f of shown) list.append(folderItem(f, !!q));
     if (!list.children.length) {
       list.append(el('li', { class: 'empty', text: q ? 'Tidak ada folder yang cocok.' : 'Belum ada folder. Kirim file ke sebuah nama folder dan folder itu akan dibuat otomatis.' }));
     }

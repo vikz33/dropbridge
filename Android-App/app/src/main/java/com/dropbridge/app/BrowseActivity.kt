@@ -429,7 +429,7 @@ class BrowseActivity : Activity() {
             // Tanpa pencarian: folder tingkat atas. Dengan pencarian: semua tingkat, tampil jalur lengkap.
             val shown = ArrayList(sorted(folders.filter { if (q.isEmpty()) it.parent.isEmpty() else it.name.lowercase().contains(q) }, folderSort, { it.name }, { it.size }, { it.modified }))
             val r = root
-            if (r != null && (q.isEmpty() || "tanpa folder".contains(q))) shown.add(r)
+            if (r != null && (q.isEmpty() || "tanpa folder".contains(q))) shown.add(0, r)  // "Tanpa folder" selalu paling atas
             if (shown.isEmpty()) {
                 list.addView(Ui.text(c, if (q.isEmpty()) "Belum ada folder. Kirim file ke sebuah nama folder dan folder itu dibuat otomatis." else "Tidak ada folder yang cocok.", 14f, false, Ui.MUTED).apply {
                     gravity = Gravity.CENTER; setPadding(0, Ui.dp(c, 24), 0, Ui.dp(c, 24))
