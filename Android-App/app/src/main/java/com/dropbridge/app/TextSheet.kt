@@ -240,3 +240,34 @@ object Undo {
         host.postDelayed({ if (!done) { done = true; host.removeView(bar) } }, 4000)
     }
 }
+
+/** Kabar di bawah layar dengan satu tombol (mis. "Buka" setelah unduhan selesai), 6 detik. */
+object Snack {
+    fun show(act: Activity, msg: String, action: String, onAction: () -> Unit) {
+        val c: Context = act
+        val root = act.findViewById<android.view.ViewGroup>(android.R.id.content) ?: return
+        val bar = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(c, Ui.INK, 14)
+            setPadding(Ui.dp(c, 16), Ui.dp(c, 4), Ui.dp(c, 6), Ui.dp(c, 4))
+            minimumHeight = Ui.dp(c, 52)
+            elevation = Ui.dp(c, 6).toFloat()
+        }
+        bar.addView(IconView(c, Icon.CHECK, if (Ui.dark) Ui.ACCENT else Ui.SOFT, 18, 2.6f))
+        bar.addView(Ui.text(c, msg, 14f, true, Ui.GROUND).apply { setPadding(Ui.dp(c, 10), 0, Ui.dp(c, 8), 0); maxLines = 2 }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        var done = false
+        bar.addView(Ui.text(c, action, 15f, true, if (Ui.dark) Ui.ACCENT else Ui.SOFT).apply {
+            minimumHeight = Ui.dp(c, 44)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(Ui.dp(c, 12), 0, Ui.dp(c, 12), 0)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { if (!done) { done = true; root.removeView(bar); onAction() } }
+        })
+        root.addView(bar, android.widget.FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM).apply {
+            leftMargin = Ui.dp(c, 12); rightMargin = Ui.dp(c, 12); bottomMargin = Ui.dp(c, 88)
+        })
+        bar.postDelayed({ if (!done) { done = true; root.removeView(bar) } }, 6000)
+    }
+}

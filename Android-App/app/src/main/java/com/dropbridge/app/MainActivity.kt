@@ -40,6 +40,8 @@ class MainActivity : Activity() {
     private lateinit var folderAdapter: ArrayAdapter<String>
     private lateinit var folderHint: TextView
     private lateinit var warnCard: LinearLayout
+    private lateinit var inCard: LinearLayout
+    private lateinit var inText: TextView
     private lateinit var warnText: TextView
     private lateinit var xferCard: LinearLayout
     private lateinit var xferTitle: TextView
@@ -125,6 +127,31 @@ class MainActivity : Activity() {
         scr = Ui.screen(this, "Kirim", " ", back = false, nav = Ui.TAB_SEND)
         builtDark = Ui.dark
         val col = scr.content
+
+        // ---------- Muncul saat perlu: file dari laptop sudah tersimpan ----------
+        inCard = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(c, Ui.SOFT, 18, Ui.ACCENT)
+            setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 10), Ui.dp(c, 12))
+            visibility = View.GONE
+        }
+        inCard.addView(FrameLayout(c).apply {
+            background = Ui.rounded(c, Ui.CARD, 12)
+            addView(IconView(c, Icon.DOWN, Ui.ACCENT, 22, 2f), FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.CENTER))
+        }, LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)).apply { rightMargin = Ui.dp(c, 12) })
+        val inCol = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        inText = Ui.text(c, "", 15f, true, Ui.DEEP)
+        inCol.addView(inText)
+        inCol.addView(Ui.text(c, "Tersimpan di Download/DropBridge", 13f, false, Ui.DEEP))
+        inCard.addView(inCol, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        inCard.addView(Ui.button(c, "Lihat", Ui.Kind.OUTLINE, 40) {
+            Inbox.lastNote = ""
+            try { startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) } catch (e: Exception) {
+                Toast.makeText(this, "Buka aplikasi Files › Download › DropBridge", Toast.LENGTH_LONG).show()
+            }
+        }.apply { textSize = 14f })
+        col.addView(inCard, Ui.lp(c, b = 12))
 
         // ---------- Kartu tujuan: laptop + folder ----------
         destCard = Ui.card(c, pad = 14)
@@ -253,6 +280,7 @@ class MainActivity : Activity() {
             Conn.connect(this)
         }
         AutoSend.schedule(this)
+        Inbox.schedule(this)
         refresh()
     }
 
@@ -395,6 +423,14 @@ class MainActivity : Activity() {
             pendingAt = now0
             Conn.connect(this)
         }
+
+        // Kiriman dari laptop untuk HP ini: diambil sendiri selama aplikasi terbuka
+        if (ok) Inbox.maybeCheck(this)
+        val fresh = Inbox.lastNote.isNotEmpty() && System.currentTimeMillis() - Inbox.lastNoteAt < 10 * 60_000
+        if (fresh) {
+            inText.text = Inbox.lastNote
+            inCard.visibility = View.VISIBLE
+        } else inCard.visibility = View.GONE
 
         val n = Queue.all().size
         refreshTools(n)

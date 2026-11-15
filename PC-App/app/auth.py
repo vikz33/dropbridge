@@ -125,6 +125,8 @@ def _kind_of(ua: str) -> str:
     """Tebak jenis perangkat dan browser dari User-Agent."""
     if "DropBridge-Android" in ua:
         return "Aplikasi Android"
+    if "DropBridge-PC" in ua:
+        return "Laptop"  # laptop lain yang mengirim lewat DropBridge-nya (kirim antarlaptop)
     if "iPhone" in ua:
         os_ = "iPhone"
     elif "iPad" in ua:
@@ -225,6 +227,40 @@ def sender(request: Request) -> dict:
         return {"name": "", "dev": "hp"}
     local = bool(s.get("local"))
     return {"name": s.get("name") or ("Laptop ini" if local else s.get("kind", "")), "dev": "pc" if local else "hp"}
+
+
+def device_key(request: Request) -> str:
+    """Kunci tetap perangkat yang sedang meminta (dari aplikasi/browser), "" bila tidak ada."""
+    token = _token_from(request)
+    s = _sessions.get(token) if token else None
+    return (s or {}).get("dev") or ""
+
+
+def known_phones() -> list[dict]:
+    """HP yang bisa dikirimi file dari laptop: yang pernah diizinkan, ditambah yang sedang masuk."""
+    now = time.time()
+    out: dict[str, dict] = {}
+    for k, t in _trusted.items():
+        out[k] = {"key": k, "name": t.get("name") or "HP", "app": "", "online": False, "last_seen": t.get("approved", 0), "pc": False}
+    for s in _sessions.values():
+        k = s.get("dev")
+        if not k or s.get("local") or s.get("status") != "ok" or not _alive(s, now):
+            continue
+        cur = out.get(k, {"key": k, "last_seen": 0})
+        cur.update({"name": s.get("name") or s.get("kind") or "HP", "app": _app_version(s.get("ua", "")),
+                    "pc": "DropBridge-PC" in (s.get("ua") or ""),
+                    "online": cur.get("online") or now - s["last"] <= ONLINE_SECONDS,
+                    "last_seen": max(cur.get("last_seen", 0), s["last"])})
+        out[k] = cur
+    # Satu baris per nama + jenis (aplikasi/browser), yang paling baru; abaikan yang tak terlihat 30 hari
+    best: dict[tuple, dict] = {}
+    for v in out.values():
+        if v.get("pc") or (not v.get("online") and now - v.get("last_seen", 0) > 30 * 86400):
+            continue
+        k = (v["name"].strip().lower(), bool(v.get("app")))
+        if k not in best or v["last_seen"] > best[k]["last_seen"]:
+            best[k] = v
+    return sorted(best.values(), key=lambda v: (not v.get("online"), -v["last_seen"]))
 
 
 def _current(request: Request) -> dict:
@@ -350,6 +386,8 @@ def _public(token: str, s: dict, mine: str | None, now: float) -> dict:
         "current": token == mine,
         "local": s["local"],
         "app": _app_version(s["ua"]),  # versi aplikasi Android ("" = lewat browser)
+        "pc": "DropBridge-PC" in (s.get("ua") or ""),  # laptop lain (kirim antarlaptop)
+        "key": s.get("dev") or "",  # kunci perangkat yang tetap (untuk kotak kiriman laptop → HP)
         "tailscale": is_tailscale(s["ip"]),  # tersambung lewat internet (orbit putus-putus di peta)
         "role": s.get("role", "full"),
         "pending": s.get("status") == "pending",

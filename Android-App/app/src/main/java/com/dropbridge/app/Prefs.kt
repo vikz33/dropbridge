@@ -14,8 +14,8 @@ object Prefs {
         }
     }
 
-    private fun get(key: String): String = sp?.getString(key, "") ?: ""
-    private fun put(key: String, value: String) { sp?.edit()?.putString(key, value)?.apply() }
+    fun get(key: String): String = sp?.getString(key, "") ?: ""
+    fun put(key: String, value: String) { sp?.edit()?.putString(key, value)?.apply() }
 
     var server: String
         get() = get("server")
@@ -112,6 +112,11 @@ object Prefs {
         if (p.isEmpty()) return
         recentTargets = (listOf(p) + recentTargets.filter { !it.equals(p, ignoreCase = true) }).take(8)
     }
+
+    /** Terima file yang dikirim laptop ke HP ini (laptop → HP). Bawaan: hidup. */
+    var receiveFromPc: Boolean
+        get() = get("recvPc") != "0"
+        set(v) = put("recvPc", if (v) "1" else "0")
 
     /** Tab Hubungkan: tampilkan Daftar (true) atau Peta tata surya (false). */
     var hubList: Boolean

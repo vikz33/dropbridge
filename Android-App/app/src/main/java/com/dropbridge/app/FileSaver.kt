@@ -45,7 +45,7 @@ object FileSaver {
     }
 
     /** Foto masuk Pictures, video masuk Movies (tampil di Galeri); lainnya ke Download. */
-    private fun folderFor(mime: String): String = when {
+    fun folderFor(mime: String): String = when {
         mime.startsWith("image/") -> "Pictures"
         mime.startsWith("video/") -> "Movies"
         else -> "Download"
@@ -59,7 +59,11 @@ object FileSaver {
     }
 
     /** Mengembalikan nama final file (bisa berbeda jika nama sudah dipakai). */
-    fun save(ctx: Context, subdir: String, name: String, len: Long, input: InputStream): String {
+    fun save(ctx: Context, subdir: String, name: String, len: Long, input: InputStream): String =
+        saveUri(ctx, subdir, name, len, input).first
+
+    /** Seperti [save], tapi juga mengembalikan alamat file (content://) untuk Buka/Pasang/Bagikan nanti. */
+    fun saveUri(ctx: Context, subdir: String, name: String, len: Long, input: InputStream): Pair<String, android.net.Uri?> {
         if (Build.VERSION.SDK_INT >= 29) {
             val resolver = ctx.contentResolver
             val mime = mimeOf(name)
@@ -85,7 +89,7 @@ object FileSaver {
                     if (c.moveToFirst()) final = c.getString(0)
                 }
             } catch (e: Exception) { /* pakai nama awal */ }
-            return final
+            return final to uri
         }
         val dir = File(ctx.getExternalFilesDir(null), subdir)
         dir.mkdirs()
@@ -100,6 +104,6 @@ object FileSaver {
             f.delete()
             throw e
         }
-        return f.name
+        return f.name to null
     }
 }

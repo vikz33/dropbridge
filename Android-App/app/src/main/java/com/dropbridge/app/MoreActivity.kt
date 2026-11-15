@@ -83,7 +83,9 @@ class MoreActivity : Activity() {
         bgVal = Ui.text(c, "", 13f, true, Ui.OK)
         val bgRow = Ui.settingRow(c, "Jalan di latar belakang", null, IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f)) { openBatterySettings() }
         ((bgRow.getChildAt(0) as LinearLayout)).addView(bgVal)
-        section("Pengiriman", Ui.group(c, listOf(autoRow, mobileRow, bgRow)))
+        val recvRow = Ui.settingRow(c, "Terima file dari laptop", "File yang dikirim laptop langsung tersimpan di Download/DropBridge",
+            Ui.switch(c, Prefs.receiveFromPc, "Terima file dari laptop") { on -> Prefs.receiveFromPc = on; Inbox.schedule(this) })
+        section("Pengiriman", Ui.group(c, listOf(autoRow, mobileRow, recvRow, bgRow)))
 
         // ---------- Tentang: versi tiap bagian ----------
         val appV = Ui.appVersion(c)

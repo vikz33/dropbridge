@@ -525,6 +525,7 @@ class BrowseActivity : Activity() {
     private fun showFiles(f: String) {
         val c: Context = this
         body.removeAllViews()
+        slots.clear()
         scr.title.text = "File di PC"
         scr.subtitle.text = "${folders.count { it.parent.isEmpty() }} folder" + stamp()
         val label = if (f.isEmpty()) "Tanpa folder" else f.substringAfterLast('/')
@@ -571,7 +572,7 @@ class BrowseActivity : Activity() {
         if (f.isNotEmpty()) {
             head.addView(dotsButton(c, "Pilihan folder", Ui.INK) { v ->
                 popup(v, listOf("Unduh semua (ZIP)" to { enqueue("$base/api/folders/${encPath(f)}/zip", "$label.zip", "DropBridge") },
-                    "Unduh semua file" to { for (r in files) download(f, r.name) }))
+                    "Unduh semua file" to { for (r in files) download(f, r.name, r.size) }))
             }.apply { background = Ui.ripple(c, Ui.CARD, 14, Ui.LINE) }, LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)).apply { leftMargin = Ui.dp(c, 8) })
         }
         body.addView(head, Ui.lp(c, b = 12))
@@ -611,11 +612,25 @@ class BrowseActivity : Activity() {
     private fun isImage(r: FileRow) = r.kind == "image"
 
     private fun openFile(f: String, r: FileRow, shown: List<FileRow>) {
-        if (isImage(r)) viewer(f, shown.filter { isImage(it) }, r) else download(f, r.name)
+        if (isImage(r)) { viewer(f, shown.filter { isImage(it) }, r); return }
+        val e = Downloaded.get(this, f, r.name)
+        when {
+            Downloaded.running.containsKey(Downloaded.key(f, r.name)) -> Toast.makeText(this, "Masih diunduh...", Toast.LENGTH_SHORT).show()
+            e != null -> localSheet(f, r, e)
+            else -> download(f, r.name, r.size)
+        }
     }
 
     private fun fileMenu(f: String, r: FileRow, anchor: View) {
-        popup(anchor, listOf("Unduh" to { download(f, r.name) }, "Bagikan" to { share(f, r.name) }))
+        val e = Downloaded.get(this, f, r.name)
+        val items = ArrayList<Pair<String, () -> Unit>>()
+        if (e != null) {
+            items.add((if (Downloaded.isApk(e.name)) "Pasang" else "Buka di HP") to { Downloaded.open(this, e) })
+            items.add("Buka lokasi file" to { Downloaded.showLocation(this, e) })
+        }
+        items.add((if (e != null) "Unduh ulang" else "Unduh") to { if (e != null) Downloaded.deleteLocal(this, e); download(f, r.name, r.size) })
+        items.add("Bagikan" to { if (e != null) Downloaded.share(this, e) else share(f, r.name) })
+        popup(anchor, items)
     }
 
     /** Gambar kecil: thumbnail dari PC, atau lencana jenis file. */
@@ -639,6 +654,74 @@ class BrowseActivity : Activity() {
         return frame
     }
 
+    // ---------- Tanda "sudah di HP" (ikon di pojok) ----------
+    private val slots = HashMap<String, FrameLayout>()
+
+    /** Bungkus gambar file dengan slot tanda ikon di pojok kanan bawah. */
+    private fun withIndicator(c: Context, f: String, r: FileRow, pic: View, sizeDp: Int, register: Boolean = true): FrameLayout {
+        val box = FrameLayout(c)
+        box.addView(pic, FrameLayout.LayoutParams(Ui.dp(c, sizeDp), Ui.dp(c, sizeDp)))
+        val slot = FrameLayout(c)
+        box.addView(slot, FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.BOTTOM or Gravity.END))
+        if (register) slots[Downloaded.key(f, r.name)] = slot
+        fillSlot(slot, f, r.name, r.size)
+        return box
+    }
+
+    private fun fillSlot(slot: FrameLayout, f: String, name: String, size: Long) {
+        slot.tag = Triple(f, name, size)
+        slot.removeAllViews()
+        val k = Downloaded.key(f, name)
+        Downloaded.indicator(this, Downloaded.state(this, f, name, size), Downloaded.running[k] ?: -1)?.let {
+            slot.addView(it, FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH))
+        }
+    }
+
+    private fun updateSlot(f: String, name: String, size: Long) {
+        slots[Downloaded.key(f, name)]?.let { fillSlot(it, f, name, size) }
+    }
+
+    /** Lembar untuk file yang sudah di HP: Pasang/Buka, Buka lokasi file, Bagikan, Unduh ulang. */
+    private fun localSheet(f: String, r: FileRow, e: Downloaded.Entry) {
+        val c: Context = this
+        val newer = e.size != r.size
+        val (d, box) = Ui.sheet(this, if (newer) "Ada versi baru" else "Sudah di HP")
+        val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val pic = withIndicator(c, f, r, picView(c, f, r, 12f).apply { background = Ui.rounded(c, Ui.FIELD, 12) }, 56, register = false)
+        head.addView(pic, LinearLayout.LayoutParams(Ui.dp(c, 60), Ui.dp(c, 60)).apply { rightMargin = Ui.dp(c, 12) })
+        val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(Ui.text(c, r.name, 16f, true).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.MIDDLE })
+        if (newer) {
+            col.addView(Ui.text(c, "Ada versi baru di laptop", 13f, true, Ui.WARN_TX))
+            col.addView(Ui.text(c, "Di HP ${Xfer.size(e.size)} · di laptop ${Xfer.size(r.size)} (${fmtTime(r.modified)})", 12f, false, Ui.MUTED))
+        } else {
+            col.addView(Ui.text(c, Xfer.size(r.size) + " · sudah di HP", 13f, false, Ui.MUTED))
+            col.addView(Ui.mono(Ui.text(c, e.rel.trimEnd('/') + "/", 12f, false, Ui.MUTED)))
+        }
+        head.addView(col, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        box.addView(head, Ui.lp(c, t = 4, b = 6))
+        val apk = Downloaded.isApk(e.name)
+        if (newer) {
+            box.addView(Ui.iconButton(c, Icon.DOWN, "Unduh versi baru", Ui.Kind.PRIMARY, 56) {
+                d.dismiss(); Downloaded.deleteLocal(this, e); download(f, r.name, r.size)
+            }, Ui.lp(c, t = 8))
+            val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(Ui.button(c, if (apk) "Pasang yang di HP" else "Buka yang di HP", Ui.Kind.OUTLINE, 52) { d.dismiss(); Downloaded.open(this, e) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { rightMargin = Ui.dp(c, 5) })
+            row.addView(Ui.button(c, "Lokasi file", Ui.Kind.OUTLINE, 52) { d.dismiss(); Downloaded.showLocation(this, e) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.dp(c, 5) })
+            box.addView(row, Ui.lp(c, t = 10))
+            box.addView(Ui.button(c, "Bagikan", Ui.Kind.OUTLINE, 52) { d.dismiss(); Downloaded.share(this, e) }, Ui.lp(c, t = 10))
+        } else {
+            box.addView(Ui.iconButton(c, if (apk) Icon.DOWN else Icon.FOLDER, if (apk) "Pasang" else "Buka", Ui.Kind.PRIMARY, 56) { d.dismiss(); Downloaded.open(this, e) }, Ui.lp(c, t = 8))
+            box.addView(Ui.iconButton(c, Icon.FOLDER, "Buka lokasi file", Ui.Kind.OUTLINE, 52) { d.dismiss(); Downloaded.showLocation(this, e) }, Ui.lp(c, t = 10))
+            val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(Ui.button(c, "Bagikan", Ui.Kind.OUTLINE, 52) { d.dismiss(); Downloaded.share(this, e) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { rightMargin = Ui.dp(c, 5) })
+            row.addView(Ui.button(c, "Unduh ulang", Ui.Kind.OUTLINE, 52) { d.dismiss(); Downloaded.deleteLocal(this, e); download(f, r.name, r.size) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.dp(c, 5) })
+            box.addView(row, Ui.lp(c, t = 10))
+            if (apk) box.addView(Ui.text(c, "Pertama kali, Android meminta izin \"Pasang aplikasi dari DropBridge\". Cukup sekali.", 13f, false, Ui.MUTED), Ui.lp(c, t = 10))
+        }
+        d.show()
+    }
+
     private fun fileTile(c: Context, f: String, r: FileRow, shown: List<FileRow>): View {
         val sq = SquareFrame(c).apply {
             background = Ui.rounded(c, if (r.thumb) Ui.FIELD else Ui.CARD, 12, if (r.thumb) 0 else Ui.LINE)
@@ -650,9 +733,13 @@ class BrowseActivity : Activity() {
         }
         if (r.thumb) {
             sq.addView(picView(c, f, r, 13f), FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH))
+            val slot = FrameLayout(c)
+            sq.addView(slot, FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.BOTTOM or Gravity.END).apply { bottomMargin = Ui.dp(c, 5); rightMargin = Ui.dp(c, 5) })
+            slots[Downloaded.key(f, r.name)] = slot
+            fillSlot(slot, f, r.name, r.size)
         } else {
             val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(Ui.dp(c, 6), 0, Ui.dp(c, 6), 0) }
-            col.addView(picView(c, f, r, 13f).apply { background = Ui.rounded(c, Ui.FIELD, 12) }, LinearLayout.LayoutParams(Ui.dp(c, 48), Ui.dp(c, 48)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            col.addView(withIndicator(c, f, r, picView(c, f, r, 13f).apply { background = Ui.rounded(c, Ui.FIELD, 12) }, 48), LinearLayout.LayoutParams(Ui.dp(c, 54), Ui.dp(c, 54)).apply { gravity = Gravity.CENTER_HORIZONTAL })
             col.addView(Ui.text(c, r.name, 11f, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE; gravity = Gravity.CENTER; setPadding(0, Ui.dp(c, 6), 0, 0) })
             sq.addView(col, FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH))
         }
@@ -673,7 +760,7 @@ class BrowseActivity : Activity() {
             setPadding(0, Ui.dp(c, 6), 0, Ui.dp(c, 6))
             setOnClickListener { openFile(f, r, shown) }
         }
-        main.addView(picView(c, f, r, 11f).apply { background = Ui.rounded(c, Ui.FIELD, 10) }, LinearLayout.LayoutParams(Ui.dp(c, 52), Ui.dp(c, 52)).apply { rightMargin = Ui.dp(c, 12) })
+        main.addView(withIndicator(c, f, r, picView(c, f, r, 11f).apply { background = Ui.rounded(c, Ui.FIELD, 10) }, 52), LinearLayout.LayoutParams(Ui.dp(c, 56), Ui.dp(c, 56)).apply { rightMargin = Ui.dp(c, 10) })
         val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         col.addView(Ui.text(c, r.name, 14f, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE })
         col.addView(Ui.text(c, Xfer.size(r.size) + " · " + fmtTime(r.modified), 12f, false, Ui.MUTED))
@@ -797,10 +884,10 @@ class BrowseActivity : Activity() {
     private var failCount = 0
     private var lastError = ""
 
-    private fun download(f: String, name: String) {
+    private fun download(f: String, name: String, size: Long = -1) {
         val url = "$base/api/files/${Uri.encode(name)}?folder=${Uri.encode(f)}"
         val sub = if (f.isEmpty()) "DropBridge" else "DropBridge/$f"
-        enqueue(url, name, sub)
+        enqueue(url, name, sub, f, size)
     }
 
     private fun whereSaved(name: String, subdir: String, saved: String): String {
@@ -814,9 +901,11 @@ class BrowseActivity : Activity() {
     }
 
     /** Unduh di dalam aplikasi, simpan lewat FileSaver (foto ke Galeri, lainnya ke Download). */
-    private fun enqueue(url: String, name: String, subdir: String) {
+    private fun enqueue(url: String, name: String, subdir: String, srcFolder: String? = null, srcSize: Long = -1) {
         pending++
         showProgress("Mengunduh $name...")
+        val dkey = if (srcFolder != null) Downloaded.key(srcFolder, name) else null
+        if (dkey != null) { Downloaded.running[dkey] = 0; updateSlot(srcFolder!!, name, srcSize) }
         worker.execute {
             try {
                 val conn = URL(url).openConnection() as HttpURLConnection
@@ -835,19 +924,35 @@ class BrowseActivity : Activity() {
                     val counted = CountingInputStream(conn.inputStream) { got ->
                         if (meter.update(got)) {
                             val pct = if (len > 0) " ${(got * 100 / len).toInt()}%" else ""
-                            runOnUiThread { showProgress("Mengunduh $name:$pct · ${Xfer.rate(meter.bps)}") }
+                            if (dkey != null && len > 0) Downloaded.running[dkey] = (got * 100 / len).toInt()
+                            runOnUiThread {
+                                showProgress("Mengunduh $name:$pct · ${Xfer.rate(meter.bps)}")
+                                if (dkey != null) (slots[dkey]?.getChildAt(0) as? Downloaded.RingView)?.let { it.pct = Downloaded.running[dkey] ?: -1; it.invalidate() }
+                            }
                         }
                     }
-                    val saved = FileSaver.save(applicationContext, subdir, name, len, counted)
+                    val (saved, uri) = FileSaver.saveUri(applicationContext, subdir, name, len, counted)
                     okCount++
                     pending--
-                    runOnUiThread { showProgress("Tersimpan: ${whereSaved(name, subdir, saved)}") }
+                    if (dkey != null) {
+                        Downloaded.running.remove(dkey)
+                        if (uri != null) Downloaded.record(srcFolder!!, name, uri, if (srcSize >= 0) srcSize else len, saved, "${FileSaver.folderFor(FileSaver.mimeOf(name))}/$subdir")
+                    }
+                    runOnUiThread {
+                        setStatus("Tersimpan: ${whereSaved(name, subdir, saved)}\n(selesai: $okCount, gagal: $failCount, menunggu: $pending)")
+                        if (dkey != null) updateSlot(srcFolder!!, name, srcSize)
+                        val e = if (srcFolder != null) Downloaded.get(this, srcFolder, name) else null
+                        if (e != null) {
+                            Snack.show(this, "$saved selesai diunduh", if (Downloaded.isApk(saved)) "Pasang" else "Buka") { Downloaded.open(this, e) }
+                        } else Toast.makeText(this, "Tersimpan: ${whereSaved(name, subdir, saved)}", Toast.LENGTH_LONG).show()
+                    }
                 } finally {
                     conn.disconnect()
                 }
             } catch (e: Exception) {
                 failCount++
                 pending--
+                if (dkey != null) { Downloaded.running.remove(dkey); runOnUiThread { updateSlot(srcFolder!!, name, srcSize) } }
                 lastError = "${e.javaClass.simpleName}: ${e.message}"
                 runOnUiThread { showProgress("GAGAL mengunduh $name: $lastError") }
             }
@@ -884,5 +989,8 @@ class BrowseActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (Ui.themeStale(this, builtDark)) recreate()
+        // File bisa dihapus dari HP saat aplikasi di belakang: cek ulang tanda "sudah di HP"
+        Downloaded.recheck()
+        for (slot in slots.values) (slot.tag as? Triple<*, *, *>)?.let { (f, n, z) -> fillSlot(slot, f as String, n as String, z as Long) }
     }
 }

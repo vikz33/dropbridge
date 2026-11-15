@@ -347,6 +347,13 @@ object Net {
         return JSONObject(r.second).optString("name", path)
     }
 
+    /** POST tanpa isi berarti (mis. tandai kiriman laptop → HP sudah diterima). */
+    fun postJson(base: String, token: String, path: String, body: String = "{}"): JSONObject {
+        val r = request("POST", base + path, token, body, 8000)
+        if (r.first !in 200..299) throw NetError(r.first, detail(r.second, "Gagal (${r.first})"))
+        return try { JSONObject(r.second) } catch (e: Exception) { JSONObject() }
+    }
+
     fun sendText(base: String, token: String, text: String) {
         val body = JSONObject().put("text", text).put("source", "hp").toString()
         val r = request("POST", "$base/api/clips", token, body, 8000)

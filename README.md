@@ -50,6 +50,21 @@ yang sudah terhubung tidak berbeda.
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
 
+## Kirim ke laptop lain dan ke HP (PC 3.2.0 · Android 3.2.0)
+
+- **Tujuan kirim di laptop**: kartu tujuan di Home laptop punya baris KE + tombol **Ganti** → "Kirim ke mana?":
+  Laptop ini (bawaan), laptop DropBridge lain di Wi-Fi ini, atau HP yang pernah tersambung.
+- **Laptop lain**: pertama kali masukkan PIN laptop itu; laptop itu menekan Izinkan (hak bawaan Hanya kirim).
+  Kolom folder dan Pilih folder memakai folder di laptop tujuan. File diteruskan oleh DropBridge laptop ini
+  (`/api/remote/*`, token disimpan di data/peers.json). Juga dari Hubungkan › planet laptop › Kirim ke sini.
+- **HP**: file ditaruh di kotak kiriman (data/outbox, `/api/outbox/*`). Aplikasi mengambilnya sendiri (tiap ±10 detik
+  saat terbuka, ±15 menit di latar belakang), menyimpan ke Download/DropBridge, dan memberi notifikasi. Bisa dimatikan
+  di Pengaturan › Terima file dari laptop. HP lewat browser melihat kartu "Ada file dari laptop" dengan tombol Unduh.
+  Laptop melihat status tiap file: menunggu diambil / diterima. Yang tidak diambil 7 hari dibuang.
+- **File yang sudah di HP (aplikasi)**: tanda ikon di tab File (centang hijau = sudah di HP, panah oranye = versi baru
+  di laptop, cincin = sedang diunduh). Ketuk: Pasang (APK) / Buka, Buka lokasi file, Bagikan, Unduh ulang.
+  Pasang APK memerlukan izin "Pasang aplikasi dari DropBridge" (ditanya sekali oleh Android).
+
 ## Hubungkan sebagai tata surya (PC 3.1.0 · Android 3.1.0)
 
 - **Laptop dan browser**: matahari = laptop. Orbit dalam = perangkat aktif sekarang, tengah = pernah tersambung,

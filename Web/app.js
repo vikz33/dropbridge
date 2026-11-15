@@ -44,6 +44,9 @@
   let via = 'lan';
   let online = true;
   let devInfo = { online: 0, devices: [] };
+  // Tujuan kirim di laptop: { t: 'self' } | { t: 'peer', id, name, os } | { t: 'phone', key, name, app }
+  let tgt = { t: 'self' };
+  try { const x = JSON.parse(store.get('db_tgt') || 'null'); if (x && x.t) tgt = x; } catch { /* bawaan */ }
   let pcInfo = { version: '', os: '', name: '', url: '' };
 
   // ---------- Util ----------
@@ -482,8 +485,12 @@
 
   // ---------- Daftar folder ----------
   async function loadFolders() {
-    const d = await api('/api/folders');
-    const sig = JSON.stringify(d) + Math.floor(Date.now() / 60000);
+    // Di halaman Kirim dengan tujuan laptop lain: saran dan Pilih folder memakai folder laptop itu
+    const remote = isOnPc && tgt.t === 'peer' && route.type === 'send';
+    let d;
+    try { d = await api(remote ? '/api/remote/folders?id=' + enc(tgt.id) : '/api/folders'); }
+    catch (e) { if (!remote) throw e; d = { folders: [], root: { count: 0 } }; }
+    const sig = (remote ? 'r' + tgt.id : 'l') + JSON.stringify(d) + Math.floor(Date.now() / 60000);
     folders = d.folders;
     rootInfo = d.root || rootInfo;
     if (sig !== foldersSig) {
@@ -979,13 +986,14 @@
   function enqueue(list, folderOverride) {
     const arr = Array.from(list);
     if (!arr.length) return false;
-    const folder = folderOverride === undefined ? targetFolder() : folderOverride;
+    const toPhone = isOnPc && tgt.t === 'phone';
+    const folder = toPhone ? '' : folderOverride === undefined ? targetFolder() : folderOverride;
     if (folder === null) {
       pendingRoot = arr;
       $('#rootDlg').showModal();
       return false;
     }
-    const where = pathLabel(folder);
+    const where = toPhone ? tgt.name : (isOnPc && tgt.t === 'peer' ? tgt.name + ' › ' : '') + pathLabel(folder);
     for (const file of arr) {
       // Folder tujuan selalu terlihat di baris, juga saat mengirim atau gagal
       const dest = el('span', { class: 'up-dest', title: 'Folder tujuan: ' + where });
@@ -1002,7 +1010,7 @@
         fail(row, `Terlalu besar (maks ${maxMB} MB)`);
         continue;
       }
-      queue.push({ file, row, folder, shrink: shrinkOn() });
+      queue.push({ file, row, folder, shrink: shrinkOn(), tgt: isOnPc ? { ...tgt } : { t: 'self' } });
       batch.total++;
     }
     syncUpCard();
@@ -1104,7 +1112,8 @@
     const busy = uploading || queue.length;
     const n = Math.min(batch.total, batch.done + (busy ? 1 : 0));
     $('#upSum').textContent = busy && batch.total ? `Mengirim ${n} dari ${batch.total}` : (batch.total ? `${batch.done} file selesai` : 'Pengiriman');
-    $('#upCount').textContent = batch.total ? 'ke ' + pathLabel(batch.folder || '') : '';
+    $('#upCount').textContent = !batch.total ? '' : isOnPc && tgt.t === 'phone' ? 'ke ' + tgt.name
+      : 'ke ' + (isOnPc && tgt.t === 'peer' ? tgt.name + ' › ' : '') + pathLabel(batch.folder || '');
     $('#upSumBar').style.width = batch.total ? Math.round((batch.done / batch.total) * 100) + '%' : '0%';
     $('.sum-bar').hidden = !batch.total || batch.total < 2;
   }
@@ -1134,22 +1143,24 @@
       job.file = file; // kalau perlu dikirim ulang, tidak dikecilkan dua kali
       job.shrink = false;
     }
-    return sendFile(file, row, job.folder);
+    return sendFile(file, row, job.folder, job.tgt);
   }
 
-  function sendFile(file, row, folder) {
+  function sendFile(file, row, folder, to = { t: 'self' }) {
     return new Promise((resolve) => {
       const state = $('.up-state', row);
       const bar = $('.bar i', row);
       const xhr = new XMLHttpRequest();
       // Jalur cepat: isi file dikirim mentah (tanpa multipart), langsung ditulis ke disk oleh server.
       let q = '/api/files/upload-raw?folder=' + enc(folder) + '&name=' + enc(file.name);
-      if (file.lastModified) q += '&last_modified=' + file.lastModified;
+      if (to.t === 'peer') q = '/api/remote/upload?id=' + enc(to.id) + '&folder=' + enc(folder) + '&name=' + enc(file.name);
+      if (to.t === 'phone') q = '/api/outbox/upload?dev=' + enc(to.key) + '&name=' + enc(file.name);
+      if (file.lastModified && to.t !== 'phone') q += '&last_modified=' + file.lastModified;
       xhr.open('POST', q);
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       const t0 = performance.now();
       let tSent = 0, lastT = 0, lastB = 0, speed = 0;
-      xhr.upload.onload = () => { tSent = performance.now(); state.textContent = 'Terkirim, menunggu PC menyimpan...'; };
+      xhr.upload.onload = () => { tSent = performance.now(); state.textContent = to.t === 'peer' ? `Meneruskan ke ${to.name}...` : 'Terkirim, menunggu PC menyimpan...'; };
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable || tSent) return;
         const pct = Math.round((e.loaded / e.total) * 100);
@@ -1177,10 +1188,13 @@
             const now = performance.now();
             const sec = (ms) => (ms / 1000).toFixed(1) + ' dtk';
             const dupe = d.saved && d.saved[0] && d.saved[0].duplicate;
-            if (dupe) state.textContent = `Sudah ada di ${real || 'Tanpa folder'} (${d.saved[0].name}), tidak disimpan ulang`;
+            if (to.t === 'phone') state.textContent = `Menunggu diambil ${to.name} · ${fmtSize(file.size)}`;
+            else if (dupe) state.textContent = `Sudah ada di ${real || 'Tanpa folder'} (${d.saved[0].name}), tidak disimpan ulang`;
             else state.textContent = `Selesai · ${fmtSize(file.size)} · ${sec(now - t0)}` + (tSent && tSent - t0 > 300 ? ' · ' + fmtSpeed(file.size * 1000 / (tSent - t0)) : '');
             setTimeout(() => { row.remove(); syncUpCard(); }, 15000);
-            if (real) { store.set('db_target', real); rememberTarget(real); }
+            if (to.t === 'peer') state.textContent = `Terkirim ke ${to.name} · ` + state.textContent;
+            if (to.t === 'phone') loadSent().catch(() => {});
+            if (real && to.t === 'self') { store.set('db_target', real); rememberTarget(real); }
             if (real && $('#folderInput').value.trim() && cleanFolder($('#folderInput').value).toLowerCase() === folder.toLowerCase()) {
               $('#folderInput').value = real; // pakai nama final dari server
             }
@@ -1632,6 +1646,7 @@
       if (inFolder() && myRole === 'full') jobs.push(loadFiles());
       if (route.type === 'more') jobs.push(loadHub());
       if (isOnPc && myRole === 'full') jobs.push(loadIncoming());
+      if (route.type === 'send') jobs.push(isOnPc ? loadSent() : loadOutbox());
       await Promise.all(jobs);
       setOnline(true);
       lastRefresh = Date.now();
@@ -1688,10 +1703,169 @@
 
   // Kartu tujuan di HP: laptop yang dituju + titik status
   function renderRouteRow() {
-    $('#routeRow').hidden = isOnPc;
-    $('#routeName').textContent = pcInfo.name || pcLabel();
-    $('#routeOs').textContent = pcInfo.os ? ' · ' + pcInfo.os : '';
+    const lap = isOnPc;
+    $('#routeRow').hidden = false;
+    $('#routeBtn').hidden = !lap;
+    const phone = lap && tgt.t === 'phone';
+    $('#routeCap').textContent = !lap ? 'KE PC' : phone ? 'KE HP' : 'KE';
+    $('#routeName').textContent = !lap ? (pcInfo.name || pcLabel()) : tgt.t === 'self' ? 'Laptop ini' : tgt.name;
+    $('#routeOs').textContent = !lap ? (pcInfo.os ? ' · ' + pcInfo.os : '') : tgt.t === 'self' ? (pcInfo.os ? ' · ' + pcInfo.os : '') : tgt.t === 'peer' ? (tgt.os ? ' · ' + tgt.os : '') : (tgt.app ? ' · aplikasi' : ' · browser');
+    $('#routeSub').textContent = !lap ? '' : tgt.t === 'self' ? shortPath(storageDir || '') : tgt.t === 'peer' ? 'File disimpan di ' + tgt.name : (tgt.app ? 'Tersimpan di Download/DropBridge di HP' : 'Muncul kartu Unduh di browser HP itu');
+    $('#routeSub').hidden = !lap;
+    $('#routeIc').classList.toggle('phone', phone);
+    const ic = $('#routeIc svg');
+    if (ic) ic.innerHTML = phone ? '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>' : '<rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>';
     $('#routeDot').classList.toggle('off', !online);
+    $('#folderBlock').hidden = phone;
+    $('.dz-title').textContent = !lap || tgt.t === 'self' ? 'Seret file ke sini' : 'Seret file untuk ' + tgt.name;
+    $('.dz-sub').textContent = !lap || tgt.t === 'self' ? 'atau tempel gambar dengan Ctrl+V' : phone ? 'Folder tidak perlu: file masuk ke Download/DropBridge di HP' : 'Folder di atas adalah folder di ' + tgt.name;
+    $('#sentCard').hidden = !phone || !sentItems.length;
+  }
+
+  // ---------- Tujuan kirim di laptop: Laptop ini, laptop lain, atau HP ----------
+  let tgtPeers = [];
+  let tgtPhones = [];
+  let sentItems = [];
+  const LAP_IC = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg>';
+  const HP_IC = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>';
+
+  function setTgt(t) {
+    tgt = t;
+    store.set('db_tgt', JSON.stringify(t));
+    foldersSig = '';
+    sentItems = [];
+    renderRouteRow();
+    loadFolders().catch(() => {});
+    if (t.t === 'phone') loadSent().catch(() => {});
+    if (t.t === 'self') setTarget(store.get('db_target') || '');
+    else if (t.t === 'peer') setTarget('');
+  }
+
+  function tgtRow({ icon, phone, app, title, sub, warn, sel, action, onclick }) {
+    const ic = el('span', { class: 'tgt-ic' + (phone ? ' phone' + (app ? '' : ' web') : '') + (sel ? ' sel' : '') });
+    ic.innerHTML = icon;
+    return el('li', {}, el('div', { class: 'tgt-row' + (sel ? ' sel' : '') },
+      el('button', { type: 'button', class: 'tgt-main', onclick }, ic,
+        el('span', { class: 'tgt-tx' }, el('b', { text: title }), el('small', { class: warn ? 'warn' : 'muted', text: sub }))),
+      sel ? svg(IC.check) : action || ''));
+  }
+
+  async function openTargets() {
+    renderTargets();
+    $('#tgtDlg').showModal();
+    try {
+      const [p, h] = await Promise.all([api('/api/remote/peers?fresh=1'), api('/api/outbox/phones')]);
+      tgtPeers = p.peers || [];
+      tgtPhones = h.phones || [];
+    } catch (e) { toast(e.message, 'err'); }
+    renderTargets();
+  }
+
+  function renderTargets() {
+    const laps = [tgtRow({ icon: LAP_IC, title: 'Laptop ini' + (pcInfo.os ? ' · ' + pcInfo.os : ''), sub: 'Simpan di ' + (shortPath(storageDir || '') || 'Documents › DropBridge'), sel: tgt.t === 'self', onclick: () => { setTgt({ t: 'self' }); $('#tgtDlg').close(); } })];
+    for (const p of tgtPeers) {
+      const name = p.name || p.url.replace('http://', '');
+      const sel = tgt.t === 'peer' && tgt.id === p.id;
+      const go = () => {
+        if (p.paired) { setTgt({ t: 'peer', id: p.id, name, os: p.os || '' }); $('#tgtDlg').close(); }
+        else askPeerPin(p);
+      };
+      const sub = p.paired ? (p.here ? 'Wi-Fi ini · sudah tersambung' : 'Sudah tersambung · tidak terlihat sekarang') + (p.role === 'send' ? ' · hanya kirim' : '')
+        : p.status === 'pending' ? 'Menunggu izin di ' + name : 'Wi-Fi ini · perlu PIN sekali';
+      laps.push(tgtRow({ icon: LAP_IC, title: name + (p.os ? ' · ' + p.os : ''), sub, warn: !p.paired, sel, onclick: go,
+        action: p.paired ? '' : el('button', { type: 'button', class: 'btn small', text: 'Sambungkan', onclick: () => askPeerPin(p) }) }));
+    }
+    if (!tgtPeers.length) laps.push(el('li', { class: 'muted small tgt-empty', text: 'Belum ada laptop lain dengan DropBridge di Wi-Fi ini.' }));
+    $('#tgtLaps').replaceChildren(...laps);
+    const phones = tgtPhones.map((h) => tgtRow({
+      icon: HP_IC, phone: true, app: !!h.app, title: h.name,
+      sub: (h.app ? 'Aplikasi' : 'Browser') + ' · ' + (h.online ? 'aktif' : 'terakhir aktif ' + ago(h.last_seen)) + ' · ' + (h.app ? (h.online ? 'langsung tersimpan di HP' : 'diambil saat aplikasi dibuka') : 'muncul kartu Unduh'),
+      sel: tgt.t === 'phone' && tgt.key === h.key,
+      onclick: () => { setTgt({ t: 'phone', key: h.key, name: h.name, app: h.app }); $('#tgtDlg').close(); },
+    }));
+    $('#tgtPhonesCap').hidden = !phones.length;
+    $('#tgtPhones').replaceChildren(...phones);
+  }
+  $('#routeBtn').addEventListener('click', openTargets);
+  $('#tgtClose').addEventListener('click', () => $('#tgtDlg').close());
+  $('#tgtDlg').addEventListener('click', (e) => { if (e.target.id === 'tgtDlg') e.target.close(); });
+
+  // PIN laptop lain, lalu tunggu izin di laptop itu
+  let peerAsk = null;
+  let peerPoll = 0;
+  function askPeerPin(p) {
+    peerAsk = p;
+    const name = p.name || p.url.replace('http://', '');
+    $('#peerTitle').textContent = 'Sambungkan ke ' + name;
+    $('#peerHelp').textContent = `Masukkan PIN ${name}. Ada di DropBridge ${name} › Pengaturan › PIN.`;
+    $('#peerPin').value = '';
+    $('#peerPin').disabled = false;
+    $('#peerOk').hidden = false;
+    $('#peerWait').hidden = true;
+    $('#peerErr').hidden = true;
+    $('#peerDlg').showModal();
+    $('#peerPin').focus();
+  }
+  function stopPeerPoll() { clearInterval(peerPoll); peerPoll = 0; }
+  $('#peerCancel').addEventListener('click', () => { stopPeerPoll(); $('#peerDlg').close(); });
+  $('#peerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const p = peerAsk;
+    const pin = $('#peerPin').value.trim();
+    if (!p || !/^\d{4,8}$/.test(pin)) { $('#peerErr').textContent = 'Isi PIN 6 angka.'; $('#peerErr').hidden = false; return; }
+    const name = p.name || p.url.replace('http://', '');
+    $('#peerErr').hidden = true;
+    try {
+      const r = await api('/api/remote/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ id: p.id, url: p.url, pin, name, os: p.os || '' }) });
+      const done = () => { stopPeerPoll(); $('#peerDlg').close(); if ($('#tgtDlg').open) $('#tgtDlg').close(); setTgt({ t: 'peer', id: r.id, name, os: p.os || '' }); toast('Tersambung ke ' + name); if (route.type !== 'send') location.hash = '#/'; };
+      if (r.status === 'ok') { done(); return; }
+      $('#peerPin').disabled = true;
+      $('#peerOk').hidden = true;
+      $('#peerWait').hidden = false;
+      $('#peerWait').textContent = `PIN benar. Menunggu izin di ${name}…`;
+      stopPeerPoll();
+      peerPoll = setInterval(async () => {
+        try {
+          const st = await api('/api/remote/status?id=' + enc(r.id));
+          if (st.status === 'ok') done();
+          else if (st.status === 'pending') $('#peerWait').textContent = `PIN benar. Menunggu izin di ${name}… ${mmss(st.wait || 0)}`;
+          else { stopPeerPoll(); $('#peerWait').hidden = true; $('#peerErr').textContent = `${name} menolak atau waktunya habis.`; $('#peerErr').hidden = false; $('#peerPin').disabled = false; $('#peerOk').hidden = false; }
+        } catch { /* coba lagi di putaran berikutnya */ }
+      }, 2000);
+    } catch (err) { $('#peerErr').textContent = err.message; $('#peerErr').hidden = false; }
+  });
+
+  // Status kiriman ke HP (menunggu diambil / diterima)
+  async function loadSent() {
+    if (!isOnPc || tgt.t !== 'phone') return;
+    const d = await api('/api/outbox/sent?dev=' + enc(tgt.key));
+    sentItems = d.items || [];
+    const got = sentItems.filter((i) => i.status === 'received').length;
+    $('#sentTitle').textContent = `${sentItems.length} file untuk ${tgt.name}`;
+    $('#sentSum').textContent = `${got} diterima · ${sentItems.length - got} menunggu`;
+    $('#sentList').replaceChildren(...sentItems.slice(0, 8).map((i) => el('li', {},
+      el('span', { class: 'sent-name', text: i.name }),
+      i.status === 'received' ? el('span', { class: 'sent-ok', text: '✓ Diterima ' + fmtClock(i.done) })
+        : el('span', { class: 'sent-wait' }, 'Menunggu diambil HP ', el('button', { type: 'button', class: 'linkbtn', text: 'Batal', onclick: async () => { await api('/api/outbox/' + i.id, { method: 'DELETE' }); loadSent(); } })))));
+    $('#sentCard').hidden = !sentItems.length;
+  }
+  const fmtClock = (ts) => new Date(ts * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+  // HP lewat browser: kiriman dari laptop untuk HP ini
+  let obSig = '';
+  async function loadOutbox() {
+    if (isOnPc) return;
+    const d = await api('/api/outbox');
+    const items = d.items || [];
+    const sig = items.map((i) => i.id).join();
+    if (sig === obSig) return;
+    obSig = sig;
+    $('#obCard').hidden = !items.length;
+    if (!items.length) return;
+    $('#obTitle').textContent = `Ada ${items.length} file dari ${items[0].from || 'laptop'}`;
+    $('#obList').replaceChildren(...items.map((i) => el('li', {},
+      el('span', { class: 'sent-name' }, i.name, el('span', { class: 'muted', text: ' · ' + fmtSize(i.size) })),
+      el('a', { class: 'btn soft small', href: '/api/outbox/' + i.id + '/file?mark=1', download: i.name, text: 'Unduh', onclick: () => setTimeout(() => { obSig = ''; loadOutbox(); }, 4000) }))));
   }
 
   // ---------- Kabar file masuk (Home laptop) ----------
@@ -1865,7 +2039,7 @@
     const out = [];
     for (const v of hubDevs) {
       if (v.local) continue; // laptop ini sendiri = matahari
-      const kind = v.pending ? 'pend' : v.app ? 'app' : 'web';
+      const kind = v.pending ? 'pend' : v.pc ? 'lap' : v.app ? 'app' : 'web';
       const ring = v.pending ? 2 : v.online && v.tailscale ? 3 : v.online ? 0 : 1;
       const sub = v.pending ? 'Menunggu izin · ' + mmss(v.wait || 0)
         : (v.app ? 'Aplikasi ' + v.app : 'Browser') + ' · ' + (v.current ? 'HP ini' : v.online ? (v.tailscale ? 'lewat internet' : 'aktif') : ago(v.last_seen));
@@ -1997,7 +2171,9 @@
       const x = p.peer;
       return [head('lap', p.name, [x.os, x.url.replace('http://', ''), x.version ? 'PC ' + x.version : ''].filter(Boolean).join(' · ')),
         el('p', { class: 'muted small', text: 'Laptop lain dengan DropBridge di Wi-Fi ini. Buka halamannya untuk mengirim file ke sana (perlu PIN laptop itu).' }),
-        el('div', { class: 'hd-acts one' }, el('a', { class: 'btn primary', href: x.url, target: '_blank', rel: 'noopener', text: 'Buka ' + p.name }))];
+        el('div', { class: 'hd-acts' + (isOnPc ? '' : ' one') },
+          isOnPc ? el('button', { class: 'btn primary', type: 'button', text: 'Kirim ke sini', onclick: () => sendToPeer(x, p.name) }) : '',
+          el('a', { class: 'btn', href: x.url, target: '_blank', rel: 'noopener', text: 'Buka ' + p.name }))];
     }
     const v = p.dev;
     const sub = [v.app ? 'Aplikasi ' + v.app : v.kind, v.ip, v.pending ? 'menunggu izin' : v.online ? (v.tailscale ? 'lewat internet' : 'aktif sekarang') : ago(v.last_seen)].join(' · ');
@@ -2015,6 +2191,15 @@
       nodes.push(el('p', { class: 'muted small', text: 'Hak dan pemutusan perangkat diatur dari laptop.' }));
     }
     return nodes;
+  }
+
+  // Dari peta: jadikan laptop itu tujuan kirim (PIN dulu bila belum tersambung)
+  async function sendToPeer(x, name) {
+    if ($('#planetDlg').open) $('#planetDlg').close();
+    try { tgtPeers = (await api('/api/remote/peers')).peers || []; } catch { /* pakai yang ada */ }
+    const p = tgtPeers.find((q) => q.id === x.id) || { ...x, paired: false };
+    if (p.paired) { setTgt({ t: 'peer', id: p.id, name, os: p.os || '' }); location.hash = '#/'; toast('Tujuan: ' + name); }
+    else askPeerPin({ ...p, name });
   }
 
   function renderDetail(planets) {
