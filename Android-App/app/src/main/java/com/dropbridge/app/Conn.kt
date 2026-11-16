@@ -30,6 +30,7 @@ object Conn {
         run {
             val base = if (rescan) Net.rescan() else Net.ensureServer()
             if (base == null) {
+                Beat.lost()
                 val name = Prefs.pcName.ifEmpty { "PC" }
                 // PC lain (mis. laptop satunya) ada di Wi-Fi ini? Sarankan, tapi jangan pindah sendiri.
                 val other = if (Prefs.pcId.isNotEmpty()) Net.discoverAll(1).firstOrNull { it.id.isNotEmpty() && it.id != Prefs.pcId } else null
@@ -53,6 +54,7 @@ object Conn {
                     Net.learnRemote(info)
                 } catch (e: Exception) { /* server lama: tanpa nama PC */ }
                 Pcs.saveActive()
+                Beat.ok()
                 Status.line = "Tersambung ke PC ($base)." + if (Net.viaRemote) " Lewat internet (Tailscale)." else ""
                 a.runOnUiThread { onAddr(base) }
                 if (Queue.all().isNotEmpty() && !UploadService.running) {
@@ -66,6 +68,7 @@ object Conn {
                     else -> "Gagal masuk: ${e.message}"
                 }
             } catch (e: Exception) {
+                Beat.lost()
                 Status.line = "Gagal terhubung: ${e.message}"
             }
         }

@@ -91,6 +91,9 @@ object Net {
         }
     } catch (e: Exception) { false }
 
+    /** Cek denyut: alamat ini masih DropBridge yang sama? */
+    fun alive(base: String): Boolean = probe(base, 3000)
+
     /** PC hasil pencarian: alamat, kode tetap, nama komputer, sistem, versi. */
     class Found(val base: String, val id: String, val host: String, val os: String, val version: String)
 

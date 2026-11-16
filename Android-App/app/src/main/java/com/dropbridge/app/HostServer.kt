@@ -30,6 +30,44 @@ class Shared(val uri: Uri, val name: String, val size: Long) {
     @Volatile var taken = 0
 }
 
+/**
+ * Tamu lewat browser: tanpa identitas, hanya di memori. Dikenali dari IP + jenis browser,
+ * hilang setelah 2 menit tanpa tanda hadir (halaman tamu memeriksa daftar file tiap 4 detik) atau saat berbagi dimatikan.
+ */
+class Guest(val name: String) {
+    @Volatile var last = System.currentTimeMillis()
+    @Volatile var got = 0
+    @Volatile var sent = 0
+    val active: Boolean get() = System.currentTimeMillis() - last < 20_000
+
+    companion object {
+        const val FORGET_MS = 120_000L
+
+        /** "HP Android · Chrome", "iPhone · Safari", "Laptop Windows · Edge", ... */
+        fun nameOf(ua: String): String {
+            val dev = when {
+                ua.contains("iPad") -> "iPad"
+                ua.contains("iPhone") || ua.contains("iPod") -> "iPhone"
+                ua.contains("Android") -> "HP Android"
+                ua.contains("Windows") -> "Laptop Windows"
+                ua.contains("Macintosh") || ua.contains("Mac OS") -> "Mac"
+                ua.contains("Linux") || ua.contains("X11") -> "Laptop Linux"
+                else -> "Perangkat"
+            }
+            val br = when {
+                ua.contains("SamsungBrowser") -> "Samsung Internet"
+                ua.contains("EdgA") || ua.contains("EdgiOS") || ua.contains("Edg/") -> "Edge"
+                ua.contains("OPR/") || ua.contains("Opera") -> "Opera"
+                ua.contains("FxiOS") || ua.contains("Firefox") -> "Firefox"
+                ua.contains("CriOS") || ua.contains("Chrome") -> "Chrome"
+                ua.contains("Safari") -> "Safari"
+                else -> "Browser"
+            }
+            return "$dev · $br"
+        }
+    }
+}
+
 /** File yang diterima dari HP lain, untuk daftar di aplikasi. */
 class Received(val name: String, val size: Long, val time: Long) {
     val mime: String get() = FileSaver.mimeOf(name)
@@ -51,6 +89,19 @@ class HostServer(private val ctx: Context, val code: String) {
     val receivedList = CopyOnWriteArrayList<Received>()
     @Volatile var port = 0
     @Volatile var lastEvent = ""
+    private val guestMap = ConcurrentHashMap<String, Guest>()
+
+    /** Tamu yang masih dianggap tersambung, terbaru dulu. */
+    fun guests(): List<Guest> {
+        val now = System.currentTimeMillis()
+        guestMap.entries.removeIf { now - it.value.last > Guest.FORGET_MS }
+        return guestMap.values.sortedByDescending { it.last }
+    }
+
+    private fun seen(ip: String, ua: String): Guest? {
+        if (ip.startsWith("127.") || ip == "::1") return null
+        return guestMap.getOrPut("$ip|$ua") { Guest(Guest.nameOf(ua)) }.also { it.last = System.currentTimeMillis() }
+    }
 
     private var server: ServerSocket? = null
     private val pool = Executors.newCachedThreadPool()
@@ -81,6 +132,7 @@ class HostServer(private val ctx: Context, val code: String) {
     fun stop() {
         try { server?.close() } catch (e: IOException) { /* abaikan */ }
         pool.shutdownNow()
+        guestMap.clear()
     }
 
     fun addShared(uri: Uri) {
@@ -206,6 +258,7 @@ class HostServer(private val ctx: Context, val code: String) {
                 json(out, auth, JSONObject().put("detail", if (auth == 429) "Terlalu banyak percobaan" else "Kode salah"))
                 return
             }
+            val guest = seen(ip, headers["user-agent"] ?: "")
 
             when {
                 method == "GET" && path == "/api/ping" ->
@@ -252,6 +305,7 @@ class HostServer(private val ctx: Context, val code: String) {
                     }
                     if (q["inline"] != "1") {
                         s.taken++
+                        guest?.let { it.got++ }
                         lastEvent = "Diambil: ${s.name}"
                     }
                 }
@@ -267,6 +321,7 @@ class HostServer(private val ctx: Context, val code: String) {
                     val items = shared.map { sh -> Pair(sh.name, { ctx.contentResolver.openInputStream(sh.uri) }) }
                     writeZip(out, items)
                     lastEvent = "Diambil sebagai ZIP (${shared.size} file)"
+                    guest?.let { it.got += shared.size }
                 }
 
                 method == "POST" && path == "/up" -> {
@@ -278,6 +333,7 @@ class HostServer(private val ctx: Context, val code: String) {
                     val name = cleanName(q["name"] ?: "file")
                     val saved = saveReceived(name, len, input)
                     received++
+                    guest?.let { it.sent++ }
                     receivedList.add(0, Received(saved, len, System.currentTimeMillis()))
                     while (receivedList.size > 30) receivedList.removeAt(receivedList.size - 1)
                     lastEvent = "Diterima: $saved"

@@ -294,6 +294,7 @@ class MainActivity : Activity() {
         items.add(Ui.Tool("Muat ulang", Icon.REFRESH) {
             shownRoute = ""; shownFolders = "-"
             Toast.makeText(this, "Memeriksa sambungan ke laptop...", Toast.LENGTH_SHORT).show()
+            Beat.kick()
             Conn.connect(this)
         })
         items.add(Ui.Tool("Teks", Icon.TEXT) { TextSheet.open(this) })
@@ -395,18 +396,19 @@ class MainActivity : Activity() {
     }
 
     private fun refresh() {
+        Beat.tick()
         val line = Status.line
-        val ok = line.startsWith("Tersambung")
+        val ok = Beat.alive()
         val host = Prefs.server.removePrefix("http://").substringBefore(':')
         val pcn = Prefs.pcName.ifEmpty { if (host.isEmpty()) "PC" else "PC $host" }
-        if (Host.server != null) Ui.setChip(scr.chip, "Host aktif", indigo = true) else Ui.setChip(scr.chip, "")
+        if (Host.server != null) Ui.setChip(scr.chip, "Berbagi aktif", indigo = true) else Ui.setChip(scr.chip, "")
         // Status sambungan di bawah judul: titik hijau = tersambung, oranye = belum
         val (dot, sub) = when {
             ok -> Ui.OK to (pcn + if (Net.viaRemote) " · lewat internet" else " · Wi-Fi")
             line == Net.PENDING -> Ui.PENDING to "Menunggu izin dari $pcn"
             line.startsWith("Mencari") -> Ui.MUTED to "Mencari PC..."
             Prefs.pin.isEmpty() -> Ui.PENDING to "Belum tersambung ke PC"
-            else -> Ui.PENDING to "$pcn tidak terjangkau"
+            else -> Ui.PENDING to "$pcn tidak terjangkau${Beat.lastSeen()}"
         }
         if (sub != shownSub) {
             shownSub = sub
@@ -460,7 +462,7 @@ class MainActivity : Activity() {
     /** Baris laptop di kartu tujuan. Hanya digambar ulang bila keadaannya berubah. */
     private fun refreshRoute(ok: Boolean, line: String) {
         val c: Context = this
-        val searching = Conn.busy || line.startsWith("Mencari")
+        val searching = !ok && (Conn.busy || line.startsWith("Mencari"))
         val addr = Net.current.ifEmpty { Prefs.server }.removePrefix("http://").removeSuffix(":8000")
         val state = when {
             searching -> "search"
@@ -474,7 +476,7 @@ class MainActivity : Activity() {
         val pcV = Prefs.pcVersion
         val pc = Prefs.pcName.ifEmpty { if (addr.isEmpty()) "PC" else addr }
         val os = if (Prefs.pcOs.isNotEmpty()) " · ${Prefs.pcOs}" else ""
-        val key = "$state|$addr|$line|$pcV|$pc|$os|${Prefs.role}"
+        val key = "$state|$addr|$line|${Beat.lastSeen()}|$pcV|$pc|$os|${Prefs.role}"
         if (key == shownRoute) return
         shownRoute = key
         data class R(val icon: Int, val fg: Int, val bg: Int, val dot: Int, val title: String, val sub: String)
@@ -484,7 +486,7 @@ class MainActivity : Activity() {
             "lan" -> R(Icon.LAPTOP, Ui.ACCENT, Ui.SOFT, Ui.OK, "$pc$os", if (Prefs.role == "send") "Hanya kirim" else "")
             "net" -> R(Icon.GLOBE, Ui.INDIGO, Ui.INDIGO_SOFT, Ui.OK, "$pc$os", "Lewat internet (Tailscale), pakai kuota")
             "nopin" -> R(Icon.LAPTOP, Ui.MUTED, Ui.FIELD, Ui.MUTED, "Belum tersambung", "Ketuk Ganti, lalu pilih laptop")
-            else -> R(Icon.LAPTOP, Ui.WARN_TX, Ui.WARN_BG, Ui.PENDING, "$pc$os", "Tidak terjangkau. Foto tetap masuk antrean.")
+            else -> R(Icon.LAPTOP, Ui.WARN_TX, Ui.WARN_BG, Ui.PENDING, "$pc$os", "Tidak terjangkau${Beat.lastSeen()}. Foto tetap masuk antrean.")
         }
         routeIcon.removeAllViews()
         routeIcon.background = Ui.rounded(c, r.bg, 12)
@@ -508,6 +510,7 @@ class MainActivity : Activity() {
         super.onResume()
         if (Ui.themeStale(this, builtDark)) { recreate(); return }
         shownTools = ""
+        Beat.kick()
         handler.post(ticker)
     }
 

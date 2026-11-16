@@ -76,6 +76,7 @@ object Pcs {
         Net.current = ""
         Net.viaRemote = false
         Status.line = ""
+        Beat.reset()
     }
 
     /** PC baru dari hasil pencarian: alamat + PIN, belum tersimpan. */
@@ -93,6 +94,7 @@ object Pcs {
         Prefs.folders = emptyList()
         Net.current = ""
         Status.line = ""
+        Beat.reset()
     }
 
     fun forget(e: PcEntry) = write(all().filter { !same(it, e) })

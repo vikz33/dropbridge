@@ -50,6 +50,12 @@ yang sudah terhubung tidak berbeda.
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
 
+## Status laptop dan tamu (PC 3.2.1 · Android 3.2.1)
+
+- Aplikasi mengecek laptop tujuan tiap 10 detik selama terbuka. Gagal 2 kali = "tidak terjangkau · terakhir HH.mm"; pulih sendiri saat laptop kembali.
+- HP yang masuk lewat browser ke "Berbagi dengan HP lain" tampil sebagai tamu (mis. "HP Android · Chrome") di peta dan di bagian HP lain. Tidak ada identitas yang disimpan; hilang 2 menit setelah halamannya ditutup atau saat berbagi dimatikan.
+- Judul tab Hubungkan menampilkan status laptop; status berbagi ("Berbagi aktif · kode") pindah ke bagian HP lain.
+
 ## Kirim ke laptop lain dan ke HP (PC 3.2.0 · Android 3.2.0)
 
 - **Tujuan kirim di laptop**: kartu tujuan di Home laptop punya baris KE + tombol **Ganti** → "Kirim ke mana?":

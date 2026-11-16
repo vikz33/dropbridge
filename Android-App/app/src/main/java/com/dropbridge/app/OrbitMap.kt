@@ -27,7 +27,7 @@ import android.widget.TextView
 class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
 
     class Planet(val key: String, val name: String, val os: String, val sub: String, val ring: Int,
-                 val dim: Boolean, val target: Boolean, val saved: PcEntry?, val found: Net.Found?)
+                 val dim: Boolean, val target: Boolean, val saved: PcEntry?, val found: Net.Found?, val guest: Guest? = null)
 
     private val c: Context = act
     private var found: List<Net.Found> = emptyList()
@@ -69,7 +69,7 @@ class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
         root.addView(space, LinearLayout.LayoutParams(Ui.MATCH, (c.resources.displayMetrics.widthPixels * 0.98f).toInt()).apply { topMargin = Ui.dp(c, 10) })
         root.addView(list, Ui.lp(c, t = 10))
         val acts = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
-        acts.addView(Ui.iconButton(c, Icon.REFRESH, "Cari ulang", Ui.Kind.OUTLINE, 48, 15f) { scan(true) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        acts.addView(Ui.iconButton(c, Icon.REFRESH, "Cari ulang", Ui.Kind.OUTLINE, 48, 15f) { Beat.kick(); scan(true) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         root.addView(acts, Ui.lp(c, t = 10))
     }
 
@@ -95,7 +95,7 @@ class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
 
     private fun planets(): List<Planet> {
         val out = ArrayList<Planet>()
-        val ok = Status.line.startsWith("Tersambung")
+        val ok = Beat.alive()
         val active = Pcs.active()
         val saved = Pcs.all().let { all -> if (active.server.isNotEmpty() && all.none { Pcs.isActive(it) }) listOf(active) + all else all }
         for (e in saved) {
@@ -119,18 +119,25 @@ class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
             if ((f.id.isNotEmpty() && f.id in known) || saved.any { it.server == f.base }) continue
             out.add(Planet("f" + f.id.ifEmpty { f.base }, f.host.ifEmpty { f.base.removePrefix("http://") }, f.os, "Baru · perlu PIN", 2, false, false, null, f))
         }
+        // Tamu lewat browser (saat berbagi menyala): aktif di orbit dalam, yang baru pergi meredup di tengah
+        val fmt = java.text.SimpleDateFormat("HH.mm", java.util.Locale.getDefault())
+        Host.server?.guests()?.forEachIndexed { i, g ->
+            val sub = if (g.active) "Tamu · aktif" else "Tamu · terakhir " + fmt.format(java.util.Date(g.last))
+            out.add(Planet("g$i${g.name}", g.name, "", sub, if (g.active) 0 else 1, !g.active, false, null, null, g))
+        }
         return out
     }
 
     fun render() {
         val ps = planets()
-        val here = ps.count { it.ring == 0 || it.ring == 3 }
+        val here = ps.count { it.guest == null && (it.ring == 0 || it.ring == 3) }
         val fresh = ps.count { it.ring == 2 }
+        val guests = ps.count { it.guest != null }
         sum.text = when {
             searching && ps.isEmpty() -> "Mencari laptop di Wi-Fi ini…"
             ps.isEmpty() -> "Belum ada laptop. Ketuk Cari ulang."
             else -> listOfNotNull(if (here > 0) "$here laptop terjangkau" else "Tidak ada laptop terjangkau",
-                if (fresh > 0) "$fresh baru" else null, if (searching) "mencari…" else null).joinToString(" · ")
+                if (fresh > 0) "$fresh baru" else null, if (guests > 0) "$guests HP tamu" else null, if (searching) "mencari…" else null).joinToString(" · ")
         }
         segMap.background = if (!listMode) Ui.rounded(c, Ui.CARD, 9, Ui.LINE) else null
         segList.background = if (listMode) Ui.rounded(c, Ui.CARD, 9, Ui.LINE) else null
@@ -173,6 +180,15 @@ class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
     /** Bulatan planet: laptop putih + lencana W/L, redup bila tidak terlihat, cincin teal bila tujuan. */
     private fun ball(p: Planet, sizeDp: Int): View {
         val f = FrameLayout(c)
+        if (p.guest != null) {
+            f.addView(FrameLayout(c).apply {
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor("#6366F1")) }
+                alpha = if (p.dim) 0.5f else 1f
+                addView(IconView(c, Icon.PHONE, Color.WHITE, (sizeDp * 0.44f).toInt(), 2f),
+                    FrameLayout.LayoutParams(Ui.dp(c, (sizeDp * 0.44f).toInt()), Ui.dp(c, (sizeDp * 0.44f).toInt()), Gravity.CENTER))
+            }, FrameLayout.LayoutParams(Ui.dp(c, sizeDp), Ui.dp(c, sizeDp), Gravity.CENTER))
+            return f
+        }
         val core = FrameLayout(c).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
@@ -200,6 +216,21 @@ class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
 
     /** Lembar detail planet: info, Jadikan tujuan kirim, Buka File, Lupakan PC. */
     private fun detail(p: Planet) {
+        p.guest?.let { g ->
+            val (d, box) = Ui.sheet(act, "HP tamu")
+            val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            head.addView(ball(p, 52), LinearLayout.LayoutParams(Ui.dp(c, 58), Ui.dp(c, 58)).apply { rightMargin = Ui.dp(c, 12) })
+            val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+            col.addView(Ui.text(c, g.name, 18f, true))
+            col.addView(Ui.text(c, p.sub.removePrefix("Tamu · ").replaceFirstChar { it.uppercase() } +
+                (if (g.sent > 0) " · kirim ${g.sent} file" else "") + (if (g.got > 0) " · ambil ${g.got} file" else ""), 13f, false, Ui.MUTED))
+            head.addView(col, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            box.addView(head, Ui.lp(c, t = 4))
+            box.addView(Ui.text(c, "Masuk lewat browser dengan kode. Tidak ada data yang disimpan: hilang dari daftar 2 menit setelah halamannya ditutup. " +
+                "Untuk mengirim ke HP ini, tambahkan file di bagian Dibagikan.", 14f, false, Ui.INK), Ui.lp(c, t = 12))
+            d.show()
+            return
+        }
         val (d, box) = Ui.sheet(act, "Laptop")
         val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         head.addView(ball(p, 52), LinearLayout.LayoutParams(Ui.dp(c, 58), Ui.dp(c, 58)).apply { rightMargin = Ui.dp(c, 12) })

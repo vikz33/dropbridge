@@ -79,6 +79,9 @@ class HostActivity : Activity() {
     private lateinit var orbit: OrbitMap
     private lateinit var pcRow: LinearLayout
     private lateinit var pcView: TextView
+    private lateinit var shareSub: TextView
+    private lateinit var guestBox: LinearLayout
+    private var guestSig = ""
     private var listSig = ""
     private val pendingUris = ArrayList<Uri>()
     private val pendingFiles = ArrayList<String>()
@@ -179,7 +182,8 @@ class HostActivity : Activity() {
         val swRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val swText = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         swText.addView(Ui.text(c, "Berbagi dengan HP lain", 16f, true))
-        swText.addView(Ui.text(c, "HP teman dan PC bisa masuk lewat browser", 13f, false, Ui.MUTED))
+        shareSub = Ui.text(c, "HP teman dan PC bisa masuk lewat browser", 13f, false, Ui.MUTED)
+        swText.addView(shareSub)
         swRow.addView(swText, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         toggle = Switch(c).apply {
             contentDescription = "Berbagi dengan HP lain"
@@ -190,6 +194,8 @@ class HostActivity : Activity() {
         }
         swRow.addView(toggle)
         sw.addView(swRow)
+        guestBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        sw.addView(guestBox, Ui.lp(c, t = 10))
         col.addView(sw, Ui.lp(c))
 
         // Peringatan bila hotspot belum menyala
@@ -384,6 +390,35 @@ class HostActivity : Activity() {
         return row
     }
 
+    /** Tamu lewat browser di kartu berbagi: nama, aktif/terakhir, jumlah file. */
+    private fun fillGuests(gs: List<Guest>) {
+        val fmt = java.text.SimpleDateFormat("HH.mm", java.util.Locale.getDefault())
+        fun st(g: Guest) = (if (g.active) "aktif" else "terakhir " + fmt.format(java.util.Date(g.last))) +
+            (if (g.sent > 0) " · kirim ${g.sent} file" else "") + (if (g.got > 0) " · ambil ${g.got} file" else "")
+        val sig = gs.joinToString("|") { it.name + st(it) }
+        if (sig == guestSig) return
+        guestSig = sig
+        val c: Context = this
+        guestBox.removeAllViews()
+        guestBox.visibility = if (gs.isEmpty()) View.GONE else View.VISIBLE
+        for (g in gs) {
+            val r = LinearLayout(c).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = Ui.dp(c, 52)
+            }
+            r.addView(android.widget.FrameLayout(c).apply {
+                background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(if (g.active) Ui.INDIGO else Ui.FIELD) }
+                addView(IconView(c, Icon.PHONE, if (g.active) android.graphics.Color.WHITE else Ui.INDIGO, 18, 2f), android.widget.FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(Ui.dp(c, 36), Ui.dp(c, 36)).apply { rightMargin = Ui.dp(c, 12) })
+            val t = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+            t.addView(Ui.text(c, g.name, 14f, true))
+            t.addView(Ui.text(c, st(g), 12f, false, Ui.MUTED))
+            r.addView(t, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            guestBox.addView(r)
+        }
+    }
+
     private fun fillLists(srv: HostServer?) {
         val c: Context = this
         val shared = srv?.shared?.toList() ?: emptyList()
@@ -459,13 +494,23 @@ class HostActivity : Activity() {
         toggle.isChecked = srv != null
         updating = false
 
+        Beat.tick()
         val line = Status.line
+        val alive = Beat.alive()
         val pcn = Prefs.pcName.ifEmpty { Prefs.server.removePrefix("http://") }
+        // Judul: status laptop (sama dengan halaman Kirim). Status berbagi ada di bagian HP lain.
+        when {
+            alive -> setSub(pcn + if (Net.viaRemote) " · lewat internet" else " · Wi-Fi", Ui.OK)
+            line == Net.PENDING -> setSub("Menunggu izin dari $pcn", Ui.PENDING)
+            Prefs.pin.isEmpty() -> setSub("Belum tersambung ke laptop", Ui.PENDING)
+            line.startsWith("Mencari") -> setSub("Mencari laptop...", Ui.MUTED)
+            else -> setSub("$pcn tidak terjangkau${Beat.lastSeen()}", Ui.PENDING)
+        }
         val pcText = when {
-            line.startsWith("Tersambung") -> "$pcn${if (Prefs.pcOs.isNotEmpty()) " · " + Prefs.pcOs else ""}\n" + (if (Net.viaRemote) "Lewat internet (Tailscale)" else "Wi-Fi yang sama") + (if (Prefs.role == "send") " · hanya kirim" else " · akses penuh")
+            alive -> "$pcn${if (Prefs.pcOs.isNotEmpty()) " · " + Prefs.pcOs else ""}\n" + (if (Net.viaRemote) "Lewat internet (Tailscale)" else "Wi-Fi yang sama") + (if (Prefs.role == "send") " · hanya kirim" else " · akses penuh")
             line == Net.PENDING -> "$pcn\nMenunggu izin. Tekan Izinkan di laptop."
             Prefs.pin.isEmpty() -> "Belum tersambung\nKetuk Ganti untuk memilih laptop"
-            else -> "$pcn\nTidak terjangkau"
+            else -> "$pcn\nTidak terjangkau${Beat.lastSeen()}"
         }
         if (pcView.text.toString() != pcText) {
             val sp = android.text.SpannableString(pcText)
@@ -477,12 +522,13 @@ class HostActivity : Activity() {
         Ui.setChip(scr.chip, "")
 
         if (srv == null) {
-            setSub("Host mati · teman belum bisa masuk", Ui.MUTED)
+            shareSub.text = "HP teman dan PC bisa masuk lewat browser"
             warn.visibility = View.GONE
             hero.visibility = View.GONE
             offCard.visibility = View.VISIBLE
             addBtn.visibility = View.GONE
             fillLists(null)
+            fillGuests(emptyList())
             shownKey = ""
             return
         }
@@ -499,7 +545,8 @@ class HostActivity : Activity() {
             pendingFiles.clear()
         }
 
-        setSub("Host aktif · kode ${srv.code}", Ui.OK)
+        val gs = srv.guests()
+        shareSub.text = "Berbagi aktif · kode ${srv.code}" + if (gs.isNotEmpty()) " · ${gs.size} HP tamu" else ""
         addBtn.visibility = View.VISIBLE
         qr.visibility = View.VISIBLE
 
@@ -548,6 +595,7 @@ class HostActivity : Activity() {
         addrView.setOnClickListener { if (ips.size > 1) { chosen = (chosen + 1) % ips.size; shownKey = ""; refresh() } }
 
         fillLists(srv)
+        fillGuests(gs)
     }
 
     private var shownSubText = ""
@@ -563,6 +611,7 @@ class HostActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (Ui.themeStale(this, builtDark)) { recreate(); return }
+        Beat.kick()
         handler.post(ticker)
         orbit.start()
     }
