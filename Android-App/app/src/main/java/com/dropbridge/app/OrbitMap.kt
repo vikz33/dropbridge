@@ -19,7 +19,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * Peta "tata surya" di tab Hubungkan (aplikasi). Matahari = HP ini; planet = laptop.
+ * Peta "tata surya" di tab Ekosistem (aplikasi). Matahari = HP ini; planet = laptop.
  * Orbit dalam = laptop di Wi-Fi ini sekarang (tujuan kirim ditandai), tengah = pernah tersambung tapi tidak terlihat,
  * luar = laptop baru di Wi-Fi ini (perlu PIN), putus-putus = tujuan dipakai lewat internet (Tailscale).
  * Berputar pelan; berhenti saat layar tidak terlihat, mode hemat baterai, atau animasi dimatikan di HP.
@@ -227,7 +227,10 @@ class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
             head.addView(col, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
             box.addView(head, Ui.lp(c, t = 4))
             box.addView(Ui.text(c, "Masuk lewat browser dengan kode. Tidak ada data yang disimpan: hilang dari daftar 2 menit setelah halamannya ditutup. " +
-                "Untuk mengirim ke HP ini, tambahkan file di bagian Dibagikan.", 14f, false, Ui.INK), Ui.lp(c, t = 12))
+                "Untuk mengirim ke HP ini, bagikan file lewat tab Kirim.", 14f, false, Ui.INK), Ui.lp(c, t = 12))
+            box.addView(Ui.button(c, "Bagikan file ke HP ini", Ui.Kind.INDIGO, 52) {
+                Prefs.sendTo = "qr"; d.dismiss(); Ui.goTab(act, Ui.TAB_SEND)
+            }, Ui.lp(c, t = 14))
             d.show()
             return
         }
@@ -242,17 +245,19 @@ class OrbitMap(private val act: Activity, private val onChanged: () -> Unit) {
         head.addView(col, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         box.addView(head, Ui.lp(c, t = 4))
         box.addView(Ui.text(c, "Status: " + p.sub + if (p.target) " · hak HP ini ${if (Prefs.role == "send") "Hanya kirim" else "Penuh"}" else "", 14f, false, Ui.INK), Ui.lp(c, t = 12))
-        if (!p.target) {
-            box.addView(Ui.button(c, "Jadikan tujuan kirim", Ui.Kind.PRIMARY, 52) {
-                if (p.saved != null) {
-                    Pcs.switchTo(if (p.found != null) p.saved.copy(server = p.found.base) else p.saved)
-                    d.dismiss(); Conn.connect(act); sig = ""; onChanged()
-                } else if (p.found != null) {
-                    d.dismiss()
-                    PcPicker.askPin(act, p.found) { Conn.connect(act); sig = ""; onChanged() }
-                }
-            }, Ui.lp(c, t = 14))
-        }
+        // Kirim ke sini: jadikan tujuan, lalu buka tab Kirim
+        box.addView(Ui.button(c, "Kirim ke sini", Ui.Kind.PRIMARY, 52) {
+            Prefs.sendTo = "pc"
+            if (p.target) {
+                d.dismiss(); Ui.goTab(act, Ui.TAB_SEND)
+            } else if (p.saved != null) {
+                Pcs.switchTo(if (p.found != null) p.saved.copy(server = p.found.base) else p.saved)
+                d.dismiss(); Conn.connect(act); Ui.goTab(act, Ui.TAB_SEND)
+            } else if (p.found != null) {
+                d.dismiss()
+                PcPicker.askPin(act, p.found) { Conn.connect(act); Ui.goTab(act, Ui.TAB_SEND) }
+            }
+        }, Ui.lp(c, t = 14))
         val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
         if (p.target && Prefs.role != "send") row.addView(Ui.button(c, "Buka File di PC ini", Ui.Kind.OUTLINE, 48) { d.dismiss(); Ui.goTab(act, Ui.TAB_FILES) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         if (p.saved != null && !p.target) {

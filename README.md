@@ -50,6 +50,14 @@ yang sudah terhubung tidak berbeda.
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
 
+## Satu pintu kirim dan Ekosistem (PC 3.3.0 · Android 3.3.0)
+
+- Tab Hubungkan sekarang bernama **Ekosistem** (ikon orbit); ikon Kirim jadi pesawat kertas. Web, Windows, Linux, dan aplikasi sama.
+- Aplikasi: **Kirim › Ganti → Kirim ke mana?** berisi Laptop dan **HP tanpa aplikasi (Bagikan lewat QR)**. Saat memilih QR, kartu tujuan langsung menampilkan QR, kode, alamat, tombol "Pilih file untuk dibagikan", dan daftar HP tamu.
+- Ketuk planet di Ekosistem › **Kirim ke sini**: tab Kirim terbuka dengan tujuan itu (planet tamu: Bagikan file ke HP ini).
+- Laptop tujuan tidak terjangkau saat Foto langsung / Pilih file: muncul peringatan, file bisa masuk antrean dan terkirim sendiri nanti.
+- Berikutnya (3.4.0): HP ke HP lewat aplikasi (sambung sekali dengan kode, antrean ke HP, mode Selalu menyala).
+
 ## Status laptop dan tamu (PC 3.2.1 · Android 3.2.1)
 
 - Aplikasi mengecek laptop tujuan tiap 10 detik selama terbuka. Gagal 2 kali = "tidak terjangkau · terakhir HH.mm"; pulih sendiri saat laptop kembali.

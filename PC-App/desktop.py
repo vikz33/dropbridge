@@ -294,10 +294,10 @@ class Desktop:
             pass
 
     def on_approve(self, dev: dict) -> None:
-        """HP baru memasukkan PIN yang benar: minta izin di jendela (halaman Hubungkan)."""
+        """HP baru memasukkan PIN yang benar: minta izin di jendela (halaman Ekosistem)."""
         name = dev.get("name") or dev.get("kind") or "HP baru"
         self.notify(f"{name} ({dev.get('ip', '')}) ingin terhubung.\nBuka DropBridge untuk Izinkan atau Tolak.", "HP baru ingin terhubung")
-        self.show("#/hubungkan")
+        self.show("#/ekosistem")
 
     def on_file(self, folder: str, name: str) -> None:
         if not settings.notify:
@@ -428,7 +428,7 @@ class Desktop:
         ver = f"Versi {VERSION}" + (f" · Android {android['version']}" if android["available"] else "")
         menu = pystray.Menu(
             pystray.MenuItem("Buka DropBridge", self.open_default, default=True),
-            pystray.MenuItem("Hubungkan HP (QR)", lambda i, it: self.show("#/hubungkan")),
+            pystray.MenuItem("Ekosistem: tambah HP (QR)", lambda i, it: self.show("#/ekosistem")),
             pystray.MenuItem("Buka folder penyimpanan", open_folder),
             pystray.MenuItem(
                 "Folder penyimpanan",

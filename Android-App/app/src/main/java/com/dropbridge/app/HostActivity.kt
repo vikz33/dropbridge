@@ -22,13 +22,13 @@ import android.widget.TextView
 import android.widget.Toast
 
 /** Menggambar kode QR. */
-class QrView(ctx: Context) : View(ctx) {
+class QrView(ctx: Context, private val sizeDp: Int = 210) : View(ctx) {
     var matrix: Array<BooleanArray>? = null
         set(v) { field = v; invalidate() }
     private val paint = Paint()
 
     override fun onMeasure(w: Int, h: Int) {
-        val s = (210 * resources.displayMetrics.density).toInt()
+        val s = (sizeDp * resources.displayMetrics.density).toInt()
         setMeasuredDimension(s, s)
     }
 
@@ -46,7 +46,7 @@ class QrView(ctx: Context) : View(ctx) {
 }
 
 /**
- * Tab Hubungkan: HP ini jadi host. Hotspot khusus menyala otomatis, lalu teman scan
+ * Tab Ekosistem: HP ini jadi host. Hotspot khusus menyala otomatis, lalu teman scan
  * QR Wi-Fi (langkah 1) dan QR halaman (langkah 2). Bila hotspot khusus gagal,
  * teman memakai hotspot biasa atau Wi-Fi yang sama, dan cukup satu QR.
  */
@@ -109,7 +109,7 @@ class HostActivity : Activity() {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         val c: Context = this
-        scr = Ui.screen(this, "Hubungkan", null, back = false, nav = Ui.TAB_HOST)
+        scr = Ui.screen(this, "Ekosistem", null, back = false, nav = Ui.TAB_HOST)
         builtDark = Ui.dark
         val col = scr.content
 
@@ -314,6 +314,7 @@ class HostActivity : Activity() {
 
     private fun turnOff() {
         HostService.stop(this)
+        if (Prefs.sendTo == "qr") Prefs.sendTo = "pc"  // berbagi dimatikan: tab Kirim kembali ke laptop
         Hotspot.stop()
         step = 1
         shownKey = ""

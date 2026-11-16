@@ -1,6 +1,7 @@
 package com.dropbridge.app
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -20,7 +21,7 @@ import android.widget.Toast
 /**
  * Tab Kirim (Home bersih, DropBridge 3): kartu tujuan (laptop + folder), Foto langsung, Pilih file,
  * dan baris ikon berlabel kecil. Yang lain hanya muncul saat perlu: progres kirim, antrean, peringatan.
- * Kirim ke HP lain ada di tab Hubungkan.
+ * Kirim ke HP lain ada di tab Kirim › Ganti › HP tanpa aplikasi.
  */
 class MainActivity : Activity() {
 
@@ -49,6 +50,24 @@ class MainActivity : Activity() {
     private lateinit var xferBar: BarView
     private lateinit var xferSize: TextView
     private lateinit var toolsBox: FrameLayout
+    // Tujuan "HP tanpa aplikasi" (berbagi lewat QR)
+    private lateinit var routeCap: TextView
+    private lateinit var folderBlock: LinearLayout
+    private lateinit var qrBlock: LinearLayout
+    private lateinit var qrView: QrView
+    private lateinit var qrCode: TextView
+    private lateinit var qrAddr: TextView
+    private lateinit var qrHint: TextView
+    private lateinit var fotoBtn: View
+    private lateinit var pickBtn: View
+    private lateinit var shareBtn: View
+    private lateinit var guestCard: LinearLayout
+    private lateinit var guestTitle: TextView
+    private lateinit var guestList: LinearLayout
+    private var shownQr = ""
+    private var shownGuests = ""
+    private var qrStartAt = 0L
+    private val pendingShare = ArrayList<android.net.Uri>()
     private var shownTools = ""
     private var shownSub = ""
     private var shownFolders = "-"
@@ -163,7 +182,8 @@ class MainActivity : Activity() {
         iconBox.addView(routeDot, FrameLayout.LayoutParams(Ui.dp(c, 14), Ui.dp(c, 14), Gravity.BOTTOM or Gravity.END))
         rrow.addView(iconBox, LinearLayout.LayoutParams(Ui.dp(c, 48), Ui.dp(c, 48)).apply { rightMargin = Ui.dp(c, 10) })
         val rcol = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        rcol.addView(Ui.caption(c, "Ke PC"))
+        routeCap = Ui.caption(c, "Ke laptop")
+        rcol.addView(routeCap)
         routeTitle = Ui.text(c, "", 16f, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         routeSub = Ui.text(c, "", 12f, false, Ui.MUTED).apply { maxLines = 2 }
         rcol.addView(routeTitle)
@@ -179,8 +199,8 @@ class MainActivity : Activity() {
             contentDescription = "Ganti PC tujuan"
             // Pilih PC tujuan (laptop Windows, laptop Linux, ...) atau hubungkan PC baru
             setOnClickListener {
-                PcPicker.open(this@MainActivity) {
-                    shownRoute = ""; shownSub = ""; shownFolders = "-"
+                PcPicker.open(this@MainActivity, onQr = { goQr() }) {
+                    shownRoute = ""; shownSub = ""; shownFolders = "-"; shownQr = ""
                     Conn.connect(this@MainActivity)
                     refresh()
                 }
@@ -194,12 +214,13 @@ class MainActivity : Activity() {
             setPadding(Ui.dp(c, 12), Ui.dp(c, 8), Ui.dp(c, 12), Ui.dp(c, 8))
         }
         destCard.addView(routeWarn, Ui.lp(c, t = 10))
-        destCard.addView(View(c).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 1)).apply { topMargin = Ui.dp(c, 12) })
+        folderBlock = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        folderBlock.addView(View(c).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 1)).apply { topMargin = Ui.dp(c, 12) })
         val fhead = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         fhead.addView(Ui.caption(c, "Ke folder"), LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         folderHint = Ui.text(c, "", 12f, true, Ui.ACCENT)
         fhead.addView(folderHint)
-        destCard.addView(fhead, Ui.lp(c, t = 12))
+        folderBlock.addView(fhead, Ui.lp(c, t = 12))
         folderAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, ArrayList(Prefs.folders))
         folderEdit = AutoCompleteTextView(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT
@@ -229,7 +250,31 @@ class MainActivity : Activity() {
             addView(IconView(c, Icon.FOLDER, Ui.ACCENT, 22, 2f), FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.CENTER))
         }, LinearLayout.LayoutParams(Ui.dp(c, 52), Ui.dp(c, 52)).apply { rightMargin = Ui.dp(c, 8) })
         frow.addView(folderEdit, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-        destCard.addView(frow, Ui.lp(c, t = 8))
+        folderBlock.addView(frow, Ui.lp(c, t = 8))
+        destCard.addView(folderBlock)
+
+        // HP tanpa aplikasi: QR + kode + alamat langsung di kartu tujuan
+        qrBlock = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        qrBlock.addView(View(c).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 1)).apply { topMargin = Ui.dp(c, 12) })
+        val qrow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        qrView = QrView(c, 140)
+        qrow.addView(qrView, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { rightMargin = Ui.dp(c, 14) })
+        val qcol = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        qcol.addView(Ui.caption(c, "Kode"))
+        qrCode = Ui.mono(Ui.text(c, "", 26f, true)).apply { letterSpacing = 0.08f }
+        qcol.addView(qrCode)
+        qcol.addView(Ui.caption(c, "Alamat"), Ui.lp(c, t = 8))
+        qrAddr = Ui.mono(Ui.text(c, "", 14f, false))
+        qcol.addView(qrAddr)
+        qrow.addView(qcol, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        qrBlock.addView(qrow, Ui.lp(c, t = 12))
+        qrHint = Ui.text(c, "", 12f, false, Ui.MUTED).apply {
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { Ui.goTab(this@MainActivity, Ui.TAB_HOST) }
+        }
+        qrBlock.addView(qrHint, Ui.lp(c, t = 10))
+        destCard.addView(qrBlock)
         col.addView(destCard, Ui.lp(c))
 
         // ---------- Muncul saat perlu: progres kirim ----------
@@ -262,10 +307,28 @@ class MainActivity : Activity() {
         col.addView(warnCard, Ui.lp(c, t = 12))
 
         // ---------- Aksi utama ----------
-        col.addView(Ui.iconButton(c, Icon.CAMERA, "Foto langsung", Ui.Kind.PRIMARY, 72, 18f) { startCapture(true) }.apply {
+        fotoBtn = Ui.iconButton(c, Icon.CAMERA, "Foto langsung", Ui.Kind.PRIMARY, 72, 18f) { checkReach { startCapture(true) } }.apply {
             background = Ui.ripple(c, Ui.FILL, 18)
-        }, Ui.lp(c, t = 12))
-        col.addView(Ui.iconButton(c, Icon.IMAGE, "Pilih file", Ui.Kind.SOFT, 56, 17f) { pickForPc() }, Ui.lp(c, t = 10))
+        }
+        col.addView(fotoBtn, Ui.lp(c, t = 12))
+        pickBtn = Ui.iconButton(c, Icon.IMAGE, "Pilih file", Ui.Kind.SOFT, 56, 17f) { checkReach { pickForPc() } }
+        col.addView(pickBtn, Ui.lp(c, t = 10))
+        shareBtn = Ui.iconButton(c, Icon.IMAGE, "Pilih file untuk dibagikan", Ui.Kind.INDIGO, 56, 17f) { pickToShare() }.apply { visibility = View.GONE }
+        col.addView(shareBtn, Ui.lp(c, t = 12))
+        // Yang dibagikan + tamu yang masuk lewat browser
+        guestCard = Ui.card(c, pad = 14).apply { visibility = View.GONE }
+        val gh = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        guestTitle = Ui.text(c, "", 14f, true)
+        gh.addView(guestTitle, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        gh.addView(Ui.text(c, "Kelola", 14f, true, Ui.INDIGO).apply {
+            minimumHeight = Ui.dp(c, 40); gravity = Gravity.CENTER_VERTICAL; setPadding(Ui.dp(c, 10), 0, 0, 0)
+            isClickable = true; isFocusable = true
+            setOnClickListener { Ui.goTab(this@MainActivity, Ui.TAB_HOST) }
+        })
+        guestCard.addView(gh)
+        guestList = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        guestCard.addView(guestList)
+        col.addView(guestCard, Ui.lp(c, t = 12))
 
         // ---------- Baris ikon ----------
         toolsBox = FrameLayout(c)
@@ -362,6 +425,21 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 41) {
+            if (resultCode != RESULT_OK || data == null) return
+            val uris = ArrayList<android.net.Uri>()
+            data.clipData?.let { cd -> for (i in 0 until cd.itemCount) uris.add(cd.getItemAt(i).uri) }
+            data.data?.let { if (it !in uris) uris.add(it) }
+            for (u in uris) {
+                try { contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (e: Exception) { /* izin sementara cukup */ }
+            }
+            val srv = Host.server
+            if (srv != null) uris.forEach { srv.addShared(it) } else pendingShare.addAll(uris)
+            shownGuests = ""
+            if (uris.isNotEmpty()) Toast.makeText(this, "${uris.size} file siap diambil. Minta teman scan QR.", Toast.LENGTH_LONG).show()
+            refresh()
+            return
+        }
         if (requestCode != 31 || capName.isEmpty()) return
         val f = java.io.File(CaptureProvider.dir(this), capName)
         val name = capName
@@ -401,9 +479,13 @@ class MainActivity : Activity() {
         val ok = Beat.alive()
         val host = Prefs.server.removePrefix("http://").substringBefore(':')
         val pcn = Prefs.pcName.ifEmpty { if (host.isEmpty()) "PC" else "PC $host" }
-        if (Host.server != null) Ui.setChip(scr.chip, "Berbagi aktif", indigo = true) else Ui.setChip(scr.chip, "")
+        val qr = Prefs.sendTo == "qr"
+        if (Host.server != null && !qr) Ui.setChip(scr.chip, "Berbagi aktif", indigo = true) else Ui.setChip(scr.chip, "")
         // Status sambungan di bawah judul: titik hijau = tersambung, oranye = belum
+        val guests = Host.server?.guests() ?: emptyList()
         val (dot, sub) = when {
+            qr && Host.server != null -> Ui.INDIGO to ("Berbagi aktif" + if (guests.isNotEmpty()) " · ${guests.size} HP tamu" else "")
+            qr -> Ui.MUTED to "Menyalakan berbagi..."
             ok -> Ui.OK to (pcn + if (Net.viaRemote) " · lewat internet" else " · Wi-Fi")
             line == Net.PENDING -> Ui.PENDING to "Menunggu izin dari $pcn"
             line.startsWith("Mencari") -> Ui.MUTED to "Mencari PC..."
@@ -417,7 +499,13 @@ class MainActivity : Activity() {
             scr.subtitle.text = sp
             scr.subtitle.visibility = View.VISIBLE
         }
-        refreshRoute(ok, line)
+        folderBlock.visibility = if (qr) View.GONE else View.VISIBLE
+        qrBlock.visibility = if (qr) View.VISIBLE else View.GONE
+        fotoBtn.visibility = if (qr) View.GONE else View.VISIBLE
+        pickBtn.visibility = if (qr) View.GONE else View.VISIBLE
+        shareBtn.visibility = if (qr) View.VISIBLE else View.GONE
+        guestCard.visibility = if (qr) View.VISIBLE else View.GONE
+        if (qr) refreshQr(guests) else refreshRoute(ok, line)
         refreshFolders()
         // Menunggu izin dari laptop: cek lagi tiap 4 detik sampai diizinkan atau ditolak
         val now0 = System.currentTimeMillis()
@@ -459,6 +547,103 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Pindah tujuan ke "HP tanpa aplikasi": berbagi dinyalakan, QR tampil di kartu tujuan. */
+    private fun goQr() {
+        Prefs.sendTo = "qr"
+        shownRoute = ""; shownSub = ""; shownQr = ""; shownGuests = ""
+        if (Host.server == null) { HostService.start(this); qrStartAt = System.currentTimeMillis() }
+        refresh()
+    }
+
+    /** Laptop tujuan tidak terjangkau: beri tahu dulu, file tetap bisa masuk antrean. */
+    private fun checkReach(go: () -> Unit) {
+        if (Prefs.pin.isEmpty() || Beat.alive() || Status.line == Net.PENDING || Conn.busy) { go(); return }
+        val pc = Prefs.pcName.ifEmpty { "Laptop" }
+        val seen = Beat.lastSeen().removePrefix(" · ")
+        AlertDialog.Builder(this)
+            .setTitle("$pc tidak terjangkau")
+            .setMessage((if (seen.isNotEmpty()) "${seen.replaceFirstChar { it.uppercase() }}. " else "") +
+                "File masuk antrean dan terkirim sendiri saat $pc muncul lagi.")
+            .setPositiveButton("Masukkan antrean") { _, _ -> go() }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun pickToShare() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        @Suppress("DEPRECATION")
+        try { startActivityForResult(i, 41) } catch (e: Exception) {
+            Toast.makeText(this, "Pemilih file tidak tersedia", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Kartu tujuan + daftar tamu saat mengirim ke HP tanpa aplikasi. */
+    private fun refreshQr(guests: List<Guest>) {
+        val c: Context = this
+        var srv = Host.server
+        if (srv == null && System.currentTimeMillis() - qrStartAt > 5000) {
+            HostService.start(this); qrStartAt = System.currentTimeMillis()
+        }
+        if (srv != null && pendingShare.isNotEmpty()) {
+            for (u in pendingShare) srv.addShared(u)
+            pendingShare.clear()
+        }
+        if (shownRoute != "qr") {
+            shownRoute = "qr"
+            routeCap.text = "Ke HP tanpa aplikasi"
+            routeIcon.removeAllViews()
+            routeIcon.background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Ui.FIELD) }
+            routeIcon.addView(IconView(c, Icon.QR, Ui.INDIGO, 20, 2f), FrameLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20), Gravity.CENTER))
+            routeTitle.text = "HP tanpa aplikasi"
+            routeSub.text = "Lewat browser · tamu masuk dengan kode"
+            routeSub.visibility = View.VISIBLE
+            routeBtn.text = "Ganti"
+            routeWarn.visibility = View.GONE
+            destCard.contentDescription = "Ke HP tanpa aplikasi, lewat browser"
+        }
+        Ui.setDot(routeDot, if (srv != null) Ui.INDIGO else Ui.MUTED)
+        val ip = Net.lanIps().firstOrNull()
+        val link = if (srv != null && ip != null) "http://$ip:${srv.port}/?k=${srv.code}" else ""
+        val hot = Net.hotspotOn()
+        val key = "$link|$hot"
+        if (key != shownQr) {
+            shownQr = key
+            qrView.matrix = if (link.isNotEmpty()) QrCode.encode(link) else null
+            qrCode.text = srv?.code ?: "······"
+            qrAddr.text = if (srv != null && ip != null) "$ip:${srv.port}" else if (srv == null) "Menyalakan..." else "Belum ada jaringan"
+            qrHint.text = if (hot) "Scan dari kamera HP mana pun. Hotspot dan langkah lengkap ada di Ekosistem."
+                else "Scan dari kamera HP mana pun. Lewat Wi-Fi kantor sering diblokir: ketuk di sini untuk menyalakan hotspot."
+        }
+        // Dibagikan + tamu
+        val shared = srv?.shared?.size ?: 0
+        val fmt = java.text.SimpleDateFormat("HH.mm", java.util.Locale.getDefault())
+        fun st(g: Guest) = (if (g.active) "aktif" else "terakhir " + fmt.format(java.util.Date(g.last))) +
+            (if (g.sent > 0) " · kirim ${g.sent} file" else "") + (if (g.got > 0) " · ambil ${g.got} file" else "")
+        val gkey = "$shared|" + guests.joinToString("|") { it.name + st(it) }
+        if (gkey == shownGuests) return
+        shownGuests = gkey
+        guestTitle.text = if (shared > 0) "Dibagikan · $shared file" else "Belum ada file dibagikan"
+        guestList.removeAllViews()
+        if (guests.isEmpty()) {
+            guestList.addView(Ui.text(c, "Belum ada HP tamu. Minta teman scan QR di atas.", 13f, false, Ui.MUTED), Ui.lp(c, t = 6))
+        }
+        for (g in guests) {
+            val r = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = Ui.dp(c, 52) }
+            r.addView(FrameLayout(c).apply {
+                background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(if (g.active) Ui.INDIGO else Ui.FIELD) }
+                addView(IconView(c, Icon.PHONE, if (g.active) android.graphics.Color.WHITE else Ui.INDIGO, 18, 2f), FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(Ui.dp(c, 36), Ui.dp(c, 36)).apply { rightMargin = Ui.dp(c, 12) })
+            val t = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+            t.addView(Ui.text(c, g.name, 14f, true))
+            t.addView(Ui.text(c, st(g), 12f, false, Ui.MUTED))
+            r.addView(t, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            guestList.addView(r)
+        }
+    }
+
     /** Baris laptop di kartu tujuan. Hanya digambar ulang bila keadaannya berubah. */
     private fun refreshRoute(ok: Boolean, line: String) {
         val c: Context = this
@@ -476,6 +661,7 @@ class MainActivity : Activity() {
         val pcV = Prefs.pcVersion
         val pc = Prefs.pcName.ifEmpty { if (addr.isEmpty()) "PC" else addr }
         val os = if (Prefs.pcOs.isNotEmpty()) " · ${Prefs.pcOs}" else ""
+        routeCap.text = "Ke laptop"
         val key = "$state|$addr|$line|${Beat.lastSeen()}|$pcV|$pc|$os|${Prefs.role}"
         if (key == shownRoute) return
         shownRoute = key

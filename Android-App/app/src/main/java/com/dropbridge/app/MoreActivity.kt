@@ -16,7 +16,7 @@ import android.widget.Toast
 /**
  * Pengaturan (ikon di kanan atas). Urutan sama dengan web dan laptop:
  * Perangkat ini, Pengiriman, Tentang, Keluar. Kecilkan foto ada di Home (ikon Foto kecil);
- * sambungan ke laptop (Ganti, PIN, alamat manual) ada di tab Hubungkan.
+ * sambungan ke laptop (Ganti, PIN, alamat manual) ada di tab Ekosistem.
  */
 class MoreActivity : Activity() {
     private var builtDark = false

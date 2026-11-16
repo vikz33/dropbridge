@@ -118,7 +118,12 @@ object Prefs {
         get() = get("recvPc") != "0"
         set(v) = put("recvPc", if (v) "1" else "0")
 
-    /** Tab Hubungkan: tampilkan Daftar (true) atau Peta tata surya (false). */
+    /** Tab Ekosistem: tampilkan Daftar (true) atau Peta tata surya (false). */
+    /** Tujuan di tab Kirim: "pc" (laptop) atau "qr" (HP tanpa aplikasi lewat berbagi). */
+    var sendTo: String
+        get() = get("sendTo").ifEmpty { "pc" }
+        set(v) = put("sendTo", v)
+
     var hubList: Boolean
         get() = get("hubList") == "1"
         set(v) = put("hubList", if (v) "1" else "0")

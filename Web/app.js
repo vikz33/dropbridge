@@ -212,7 +212,7 @@
 
   function setTitle() {
     const where = isOnPc ? 'PC ini' : pcLabel();
-    const page = route.type === 'send' ? 'Kirim ke ' + where : route.type === 'more' ? 'Hubungkan' : route.type === 'welcome' ? 'Selamat datang' : 'File di ' + where;
+    const page = route.type === 'send' ? 'Kirim ke ' + where : route.type === 'more' ? 'Ekosistem' : route.type === 'welcome' ? 'Selamat datang' : 'File di ' + where;
     $('#pageTitle').textContent = page;
     document.title = page + ' · DropBridge';
   }
@@ -421,7 +421,7 @@
       try { return { type: 'folder', name: decodeURIComponent(h.slice(4)) }; } catch { /* jatuh ke beranda */ }
     }
     if (h === '#/folders') return { type: 'home', name: '' };
-    if (h === '#/hubungkan' || h === '#/lainnya') return { type: 'more', name: '' };
+    if (h === '#/ekosistem' || h === '#/hubungkan' || h === '#/lainnya') return { type: 'more', name: '' };
     if (h === '#/selamat-datang') return { type: 'welcome', name: '' };
     return { type: 'send', name: '' };
   }
@@ -1691,7 +1691,7 @@
   $('#tAll').addEventListener('click', () => { location.hash = '#/folders'; });
   $('#tText').addEventListener('click', openText);
   $('#tStore').addEventListener('click', changeStorage);
-  $('#tAdd').addEventListener('click', () => { location.hash = '#/hubungkan'; });
+  $('#tAdd').addEventListener('click', () => { location.hash = '#/ekosistem'; });
   $('#tRefresh').addEventListener('click', async () => {
     const b = $('#tRefresh');
     if (b.classList.contains('spin')) return;
@@ -2238,7 +2238,7 @@
       try {
         const d = await api('/api/devices/pending');
         const next = (d.pending || [])[0];
-        // Munculkan sekali per permintaan; kalau ditutup, jawab lewat kartu di Hubungkan
+        // Munculkan sekali per permintaan; kalau ditutup, jawab lewat kartu di Ekosistem
         if (next && !$('#approveDlg').open && !apShown.has(next.id)) { apShown.add(next.id); openApprove(next); }
         if (!next && $('#approveDlg').open) $('#approveDlg').close();
         if (route.type === 'more') loadHub().catch(() => {});

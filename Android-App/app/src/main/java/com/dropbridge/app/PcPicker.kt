@@ -18,7 +18,8 @@ import android.widget.TextView
  * Cari ulang, dan isi alamat manual. Pilihan diingat; HP tidak pindah PC sendiri.
  */
 object PcPicker {
-    fun open(act: Activity, onChanged: () -> Unit) {
+    /** onQr != null: tampilkan juga bagian "HP tanpa aplikasi" (Kirim › Ganti). */
+    fun open(act: Activity, onQr: (() -> Unit)? = null, onChanged: () -> Unit) {
         val c: Context = act
         val d = android.app.Dialog(act)
         d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
@@ -30,20 +31,48 @@ object PcPicker {
         }
         box.addView(View(c).apply { background = Ui.rounded(c, Ui.LINE, 4) }, LinearLayout.LayoutParams(Ui.dp(c, 40), Ui.dp(c, 4)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = Ui.dp(c, 8) })
         val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        head.addView(Ui.text(c, "Kirim ke PC mana?", 18f, true), LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        head.addView(Ui.text(c, if (onQr != null) "Kirim ke mana?" else "Kirim ke PC mana?", 18f, true), LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         head.addView(Ui.text(c, "Tutup", 14f, true, Ui.ACCENT).apply {
             minimumHeight = Ui.dp(c, 44); gravity = Gravity.CENTER_VERTICAL; setPadding(Ui.dp(c, 12), 0, Ui.dp(c, 4), 0)
             isClickable = true; isFocusable = true; setOnClickListener { d.dismiss() }
         })
         box.addView(head)
         val list = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        box.addView(android.widget.ScrollView(c).apply { addView(list) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP))
+        val scrollBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        if (onQr != null) scrollBox.addView(Ui.caption(c, "Laptop").apply { setPadding(Ui.dp(c, 6), Ui.dp(c, 4), 0, Ui.dp(c, 4)) })
+        scrollBox.addView(list)
+        if (onQr != null) {
+            scrollBox.addView(Ui.caption(c, "HP tanpa aplikasi").apply { setPadding(Ui.dp(c, 6), Ui.dp(c, 12), 0, Ui.dp(c, 4)) })
+            val sel = Prefs.sendTo == "qr"
+            val q = LinearLayout(c).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = Ui.dp(c, 64)
+                isClickable = true
+                isFocusable = true
+                setPadding(Ui.dp(c, 8), 0, Ui.dp(c, 8), 0)
+                background = Ui.ripple(c, if (sel) Ui.INDIGO_SOFT else Ui.CARD, 14)
+                contentDescription = "Bagikan lewat QR ke HP mana pun" + if (sel) ". Dipilih" else ""
+                setOnClickListener { d.dismiss(); onQr() }
+            }
+            q.addView(FrameLayout(c).apply {
+                background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Ui.FIELD) }
+                addView(IconView(c, Icon.QR, Ui.INDIGO, 20, 2f), FrameLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20), Gravity.CENTER))
+            }, LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)).apply { rightMargin = Ui.dp(c, 12) })
+            val qc = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+            qc.addView(Ui.text(c, "Bagikan lewat QR", 16f, true))
+            qc.addView(Ui.text(c, "HP mana pun, dibuka di browser · iPhone juga bisa", 12f, false, Ui.MUTED))
+            q.addView(qc, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            q.addView(if (sel) IconView(c, Icon.CHECK, Ui.INDIGO, 22, 2.6f) else IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f))
+            scrollBox.addView(q)
+        }
+        box.addView(android.widget.ScrollView(c).apply { addView(scrollBox) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP))
         val note = Ui.text(c, "", 12f, false, Ui.MUTED).apply { setPadding(Ui.dp(c, 4), Ui.dp(c, 6), Ui.dp(c, 4), 0) }
         box.addView(note)
         val btns = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
         val again = Ui.button(c, "Cari ulang", Ui.Kind.OUTLINE, 50) {}
         val manual = Ui.button(c, "Isi manual", Ui.Kind.OUTLINE, 50) {
-            d.dismiss(); Ui.goTab(act, Ui.TAB_HOST)  // PIN + alamat manual ada di Hubungkan › Laptop
+            d.dismiss(); Ui.goTab(act, Ui.TAB_HOST)  // PIN + alamat manual ada di Ekosistem › Laptop
         }
         btns.addView(again, Ui.lp(c, 0, Ui.WRAP, r = 5, weight = 1f))
         btns.addView(manual, Ui.lp(c, 0, Ui.WRAP, l = 5, weight = 1f))
@@ -94,7 +123,7 @@ object PcPicker {
             val here = found.associateBy { it.id }
             for (e in saved) {
                 val f = found.firstOrNull { (e.id.isNotEmpty() && it.id == e.id) || it.base == e.server }
-                val sel = Pcs.isActive(e)
+                val sel = Pcs.isActive(e) && (onQr == null || Prefs.sendTo != "qr")
                 val line = when {
                     f != null -> "Wi-Fi ini" + (if (sel) " · dipilih" else "")
                     searching -> "Mencari…"
@@ -102,10 +131,11 @@ object PcPicker {
                     else -> "Mati atau di jaringan lain"
                 }
                 list.addView(row(e.label, e.os, line, f != null, sel, click = {
-                    if (!sel) {
+                    if (onQr != null) Prefs.sendTo = "pc"
+                    if (!Pcs.isActive(e)) {
                         Pcs.switchTo(if (f != null) e.copy(server = f.base) else e)
-                        onChanged()
                     }
+                    if (!sel) onChanged()
                     d.dismiss()
                 }, long = {
                     AlertDialog.Builder(act).setTitle("Lupakan ${e.label}?")
@@ -119,7 +149,7 @@ object PcPicker {
             for (f in found.filter { it.id.isEmpty() || it.id !in known }) {
                 if (saved.any { it.server == f.base && it.id.isEmpty() }) continue
                 list.addView(row(f.host.ifEmpty { f.base.removePrefix("http://") }, f.os, "PC baru di Wi-Fi ini · ketuk lalu masukkan PIN", true, false, click = {
-                    askPin(act, f) { d.dismiss(); onChanged() }
+                    askPin(act, f) { if (onQr != null) Prefs.sendTo = "pc"; d.dismiss(); onChanged() }
                 }), Ui.lp(c, b = 4))
             }
             if (list.childCount == 0) {

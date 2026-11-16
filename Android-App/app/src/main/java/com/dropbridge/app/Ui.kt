@@ -67,6 +67,8 @@ object Icon {
     const val DRIVE = 39
     const val LAPTOP = 40
     const val CHEVRON = 41
+    const val SEND = 42
+    const val ORBIT = 43
 }
 
 class IconView(ctx: Context, private val kind: Int, private val color: Int, private val sizeDp: Int = 24, private val sw: Float = 1.9f) : View(ctx) {
@@ -291,6 +293,19 @@ class IconView(ctx: Context, private val kind: Int, private val color: Int, priv
                 poly(c, false, 2f, 19f, 22f, 19f)
             }
             Icon.CHEVRON -> poly(c, false, 9f, 6f, 15f, 12f, 9f, 18f)
+            Icon.SEND -> {
+                poly(c, false, 21f, 3f, 10.5f, 13.5f)
+                poly(c, true, 21f, 3f, 14.5f, 21f, 10.5f, 13.5f, 3f, 9.5f)
+            }
+            Icon.ORBIT -> {
+                p.pathEffect = android.graphics.DashPathEffect(floatArrayOf(36f, 6f), 0f)
+                c.drawCircle(12f, 12f, 8f, p)
+                p.pathEffect = null
+                p.style = Paint.Style.FILL
+                c.drawCircle(12f, 12f, 2.6f, p)
+                c.drawCircle(17.7f, 6.3f, 2.4f, p)
+                p.style = Paint.Style.STROKE
+            }
             Icon.GLOBE -> {
                 c.drawCircle(12f, 12f, 9f, p)
                 c.drawOval(RectF(8f, 3f, 16f, 21f), p)
@@ -700,16 +715,16 @@ object Ui {
         a.overridePendingTransition(0, 0)
     }
 
-    /** Menu bawah: Kirim, File, Hubungkan. Pengaturan lewat ikon di kepala layar. */
+    /** Menu bawah: Kirim, File, Ekosistem. Pengaturan lewat ikon di kepala layar. */
     fun bottomNav(a: Activity, active: Int): View {
         val row = LinearLayout(a).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(CARD)
         }
         val items = listOf(
-            Triple("Kirim", Icon.UP, TAB_SEND),
+            Triple("Kirim", Icon.SEND, TAB_SEND),
             Triple("File", Icon.FOLDER, TAB_FILES),
-            Triple("Hubungkan", Icon.QR, TAB_HOST),
+            Triple("Ekosistem", Icon.ORBIT, TAB_HOST),
         )
         for ((label, icon, tab) in items) {
             if (tab == TAB_FILES && Prefs.role == "send" && active != TAB_FILES) continue  // HP "hanya kirim": tanpa menu File
