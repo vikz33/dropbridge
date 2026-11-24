@@ -62,6 +62,37 @@ object Prefs {
         get() = get("lastFolder")
         set(v) = put("lastFolder", v)
 
+    /** Folder bawaan di layar Kirim: "root" (Tanpa folder, bawaan), "last" (terakhir dipakai), atau "fixed" (folder tertentu). */
+    var defaultFolderMode: String
+        get() = get("defFolderMode").ifEmpty { "root" }
+        set(v) = put("defFolderMode", v)
+
+    /** Folder tertentu untuk mode "fixed". */
+    var fixedFolder: String
+        get() = get("fixedFolder")
+        set(v) = put("fixedFolder", v)
+
+    /** Isi kolom folder saat layar Kirim dibuka, sesuai folder bawaan. Folder tertentu yang sudah tidak ada di PC → Tanpa folder. */
+    fun startFolder(): String = when (defaultFolderMode) {
+        "last" -> lastFolder.ifEmpty { FolderPicker.ROOT }
+        "fixed" -> {
+            val f = fixedFolder
+            val gone = f.isNotEmpty() && folders.isNotEmpty() && folders.none { it.equals(f, ignoreCase = true) }
+            if (f.isEmpty() || gone) FolderPicker.ROOT else f
+        }
+        else -> FolderPicker.ROOT
+    }
+
+    /** Cara memberi nama file: "asli" (bawaan) atau "otomatis" (PC memberi nomor urut). */
+    var nameMode: String
+        get() = get("nameMode").ifEmpty { "asli" }
+        set(v) = put("nameMode", v)
+
+    /** Pola nama otomatis: "foto" (Foto 01, bawaan), "folder" (Nama folder 01), atau "tanggal" (2026-11-18 01). */
+    var namePattern: String
+        get() = get("namePattern").ifEmpty { "foto" }
+        set(v) = put("namePattern", v)
+
     /** Kirim antrean otomatis saat HP tersambung Wi-Fi (default aktif). */
     var shrinkPhotos: Boolean
         get() = sp?.getBoolean("shrinkPhotos", true) ?: true

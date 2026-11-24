@@ -85,7 +85,9 @@ class MoreActivity : Activity() {
         ((bgRow.getChildAt(0) as LinearLayout)).addView(bgVal)
         val recvRow = Ui.settingRow(c, "Terima file dari laptop", "File yang dikirim laptop langsung tersimpan di Download/DropBridge",
             Ui.switch(c, Prefs.receiveFromPc, "Terima file dari laptop") { on -> Prefs.receiveFromPc = on; Inbox.schedule(this) })
-        section("Pengiriman", Ui.group(c, listOf(autoRow, mobileRow, recvRow, bgRow)))
+        val folderRow = Ui.settingRow(c, "Folder bawaan", defaultFolderText(), IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f)) { askDefaultFolder() }
+        val nameModeRow = Ui.settingRow(c, "Nama file bawaan", nameModeText() + ". \"Sendiri\" dipilih per kiriman.", IconView(c, Icon.CHEVRON, Ui.MUTED, 18, 2.2f)) { askNameMode() }
+        section("Pengiriman", Ui.group(c, listOf(folderRow, nameModeRow, autoRow, mobileRow, recvRow, bgRow)))
 
         // ---------- Tentang: versi tiap bagian ----------
         val appV = Ui.appVersion(c)
@@ -133,6 +135,65 @@ class MoreActivity : Activity() {
                 background = Ui.ripple(c, Ui.CARD, 12, Tokens.DANGER_SOFT)
             }, Ui.lp(c, t = 20))
         }
+    }
+
+    private fun defaultFolderText(): String = when (Prefs.defaultFolderMode) {
+        "last" -> "Terakhir dipakai"
+        "fixed" -> if (Prefs.fixedFolder.isEmpty()) "Tanpa folder" else pathLabel(Prefs.fixedFolder)
+        else -> "Tanpa folder"
+    }
+
+    /** Folder yang terpilih saat layar Kirim dibuka: Tanpa folder (bawaan), terakhir dipakai, atau folder tertentu. */
+    private fun askDefaultFolder() {
+        val items = arrayOf("Tanpa folder (bawaan)", "Terakhir dipakai", "Folder tertentu…")
+        val cur = when (Prefs.defaultFolderMode) { "last" -> 1; "fixed" -> 2; else -> 0 }
+        AlertDialog.Builder(this).setTitle("Folder bawaan")
+            .setSingleChoiceItems(items, cur) { d, which ->
+                d.dismiss()
+                when (which) {
+                    0 -> { Prefs.defaultFolderMode = "root"; recreate() }
+                    1 -> { Prefs.defaultFolderMode = "last"; recreate() }
+                    else -> FolderPicker.open(this, Prefs.fixedFolder.ifEmpty { FolderPicker.ROOT }) { p ->
+                        if (FolderPicker.isRoot(p)) {
+                            Prefs.defaultFolderMode = "root"
+                        } else {
+                            Prefs.fixedFolder = p
+                            Prefs.defaultFolderMode = "fixed"
+                        }
+                        recreate()
+                    }
+                }
+            }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun nameModeText(): String = when {
+        Prefs.nameMode != "otomatis" -> "Asli (nama dari HP)"
+        Prefs.namePattern == "folder" -> "Otomatis · Nama folder 01"
+        Prefs.namePattern == "tanggal" -> "Otomatis · Tanggal 01"
+        else -> "Otomatis · Foto 01"
+    }
+
+    private fun askNameMode() {
+        val items = arrayOf("Asli (nama dari HP)", "Otomatis · Foto 01", "Otomatis · Nama folder 01", "Otomatis · Tanggal 01")
+        val cur = when {
+            Prefs.nameMode != "otomatis" -> 0
+            Prefs.namePattern == "folder" -> 2
+            Prefs.namePattern == "tanggal" -> 3
+            else -> 1
+        }
+        AlertDialog.Builder(this).setTitle("Nama file bawaan")
+            .setSingleChoiceItems(items, cur) { d, which ->
+                d.dismiss()
+                if (which == 0) {
+                    Prefs.nameMode = "asli"
+                } else {
+                    Prefs.nameMode = "otomatis"
+                    Prefs.namePattern = when (which) { 2 -> "folder"; 3 -> "tanggal"; else -> "foto" }
+                }
+                recreate()
+            }
+            .setNegativeButton("Batal", null).show()
     }
 
     private fun askName() {

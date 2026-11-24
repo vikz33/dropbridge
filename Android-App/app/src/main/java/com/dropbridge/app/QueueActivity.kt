@@ -27,6 +27,13 @@ class QueueActivity : Activity() {
     private lateinit var emptyView: TextView
     private lateinit var clearBtn: View
     private var shown = "-"
+    private lateinit var countView: TextView
+    private lateinit var toggleAll: TextView
+    private lateinit var heads: LinearLayout
+    /** Folder yang dibuka. Sebelum pengguna menyentuh apa pun: satu folder = terbuka, dua atau lebih = tertutup. */
+    private val openSet = HashSet<String>()
+    private var touched = false
+    private val bars = HashMap<String, android.widget.ProgressBar>()
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -51,6 +58,19 @@ class QueueActivity : Activity() {
             if (Queue.all().isEmpty()) Status.line = "Antrean kosong." else UploadService.start(this)
         }, Ui.lp(c, t = 12))
         col.addView(top, Ui.lp(c))
+
+        heads = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        countView = Ui.caption(c, "")
+        heads.addView(countView, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        toggleAll = Ui.text(c, "Buka semua", 14f, true, Ui.ACCENT).apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            minimumHeight = Ui.dp(c, 44)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { toggleEverything() }
+        }
+        heads.addView(toggleAll)
+        col.addView(heads, Ui.lp(c, t = 12))
 
         list = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         col.addView(list, Ui.lp(c))
@@ -77,6 +97,28 @@ class QueueActivity : Activity() {
     }
 
     private fun movable(ids: List<String>): List<String> = ids.filter { it != Uploader.currentId }
+
+    /** Folder yang sedang terbuka sekarang. */
+    private fun effectiveOpen(folders: List<String>): Set<String> =
+        if (touched) openSet.filter { it in folders }.toSet() else if (folders.size == 1) folders.toSet() else emptySet()
+
+    private fun toggleFolder(folder: String, folders: List<String>) {
+        val now = effectiveOpen(folders).toMutableSet()
+        if (!now.add(folder)) now.remove(folder)
+        openSet.clear(); openSet.addAll(now); touched = true
+        shown = "-"
+        refresh()
+    }
+
+    private fun toggleEverything() {
+        val folders = Queue.groups().map { it.first }
+        val now = effectiveOpen(folders)
+        openSet.clear()
+        if (now.size < folders.size) openSet.addAll(folders)
+        touched = true
+        shown = "-"
+        refresh()
+    }
 
     /** Dialog pilih folder baru untuk file di antrean. */
     private fun askFolder(title: String, current: String, ids: List<String>) {
@@ -153,44 +195,78 @@ class QueueActivity : Activity() {
         emptyView.visibility = if (total == 0) View.VISIBLE else View.GONE
         clearBtn.visibility = if (total == 0) View.GONE else View.VISIBLE
 
-        val sig = groups.joinToString("|") { g -> g.first + ":" + g.second.joinToString(",") { it.id } } + "#" + cur
+        val folders = groups.map { it.first }
+        val opened = effectiveOpen(folders)
+        countView.text = "${groups.size} FOLDER · $total FILE"
+        heads.visibility = if (total == 0) View.GONE else View.VISIBLE
+        toggleAll.visibility = if (groups.size < 2) View.GONE else View.VISIBLE
+        toggleAll.text = if (opened.size >= groups.size) "Ciutkan semua" else "Buka semua"
+        for ((_, bar) in bars) bar.progress = Xfer.percent()
+
+        val sig = groups.joinToString("|") { g -> g.first + ":" + g.second.joinToString(",") { it.id } } + "#" + cur + "#" + opened.sorted().joinToString(",")
         if (sig == shown) return
         shown = sig
         list.removeAllViews()
+        bars.clear()
         val c: Context = this
         for ((folder, items) in groups) {
-            val card = Ui.card(c)
-            val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            head.addView(IconView(c, Icon.FOLDER, Ui.ACCENT, 24, 2f))
-            val ht = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(c, 12), 0, 0, 0) }
-            ht.addView(Ui.text(c, Queue.label(folder), 17f, true))
+            val isOpen = folder in opened
             val sending = items.any { it.id == cur }
-            ht.addView(Ui.text(c, "${items.size} file · ${Xfer.size(items.sumOf { it.size })}" + if (sending) " · sedang dikirim" else "", 13f, false, if (sending) Ui.ACCENT else Ui.MUTED))
+            val card = Ui.card(c)
+            val head = LinearLayout(c).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = Ui.dp(c, 52)
+                isClickable = true
+                isFocusable = true
+                contentDescription = "${Queue.label(folder)}, ${items.size} file, " + if (isOpen) "terbuka. Ketuk untuk menutup." else "tertutup. Ketuk untuk membuka."
+                setOnClickListener { toggleFolder(folder, folders) }
+            }
+            head.addView(IconView(c, Icon.FOLDER, Ui.ACCENT, 24, 2f))
+            val ht = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(c, 12), 0, Ui.dp(c, 8), 0) }
+            ht.addView(Ui.text(c, Queue.label(folder), 17f, true))
+            ht.addView(Ui.text(c, "${items.size} file · ${Xfer.size(items.sumOf { it.size })}", 13f, false, Ui.MUTED))
+            if (sending && !isOpen) {
+                val bar = android.widget.ProgressBar(c, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 100
+                    progress = Xfer.percent()
+                    progressTintList = android.content.res.ColorStateList.valueOf(Ui.ACCENT)
+                }
+                bars[folder] = bar
+                ht.addView(bar, Ui.lp(c, h = Ui.dp(c, 8), t = 6))
+            }
             head.addView(ht, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            head.addView(Ui.text(c, if (sending) "Mengirim" else "Menunggu", 12f, true, if (sending) Ui.DEEP else Ui.MUTED).apply {
+                background = Ui.rounded(c, if (sending) Ui.SOFT else Ui.FIELD, 999)
+                setPadding(Ui.dp(c, 10), Ui.dp(c, 4), Ui.dp(c, 10), Ui.dp(c, 4))
+            }, Ui.lp(c, Ui.WRAP, Ui.WRAP, r = 6))
+            head.addView(IconView(c, Icon.CHEVRON, Ui.MUTED, 20, 2.2f).apply { rotation = if (isOpen) 90f else 0f })
             card.addView(head)
 
-            val acts = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
-            acts.addView(Ui.button(c, "Ganti folder", Ui.Kind.OUTLINE, 42) {
-                askFolder("Pindahkan ${items.size} file dari ${Queue.label(folder)} ke", folder, items.map { it.id })
-            }, Ui.lp(c, 0, Ui.WRAP, r = 6, weight = 1f))
-            acts.addView(Ui.button(c, "Hapus folder ini", Ui.Kind.OUTLINE, 42) {
-                askRemove("Hapus ${items.size} file tujuan ${Queue.label(folder)} dari antrean?", items.map { it.id })
-            }, Ui.lp(c, 0, Ui.WRAP, l = 6, weight = 1f))
-            card.addView(acts, Ui.lp(c, t = 12))
+            if (isOpen) {
+                val acts = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+                acts.addView(Ui.button(c, "Ganti folder", Ui.Kind.OUTLINE, 42) {
+                    askFolder("Pindahkan ${items.size} file dari ${Queue.label(folder)} ke", folder, items.map { it.id })
+                }, Ui.lp(c, 0, Ui.WRAP, r = 6, weight = 1f))
+                acts.addView(Ui.button(c, "Hapus folder ini", Ui.Kind.OUTLINE, 42) {
+                    askRemove("Hapus ${items.size} file tujuan ${Queue.label(folder)} dari antrean?", items.map { it.id })
+                }, Ui.lp(c, 0, Ui.WRAP, l = 6, weight = 1f))
+                card.addView(acts, Ui.lp(c, t = 12))
 
-            for (it in items) {
-                card.addView(View(c).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 1)).apply { topMargin = Ui.dp(c, 10) })
-                val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                val rt = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-                rt.addView(Ui.text(c, it.name, 14f, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
-                rt.addView(Ui.text(c, Xfer.size(it.size) + if (it.id == cur) " · sedang dikirim" else "", 12f, false, if (it.id == cur) Ui.ACCENT else Ui.MUTED))
-                row.addView(rt, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-                if (it.id != cur) {
-                    val item = it
-                    row.addView(smallBtn(c, "Pindah", Ui.ACCENT) { askFolder("Pindahkan ${item.name} ke", item.folder, listOf(item.id)) })
-                    row.addView(smallBtn(c, "Hapus", Ui.DANGER) { askRemove("Hapus ${item.name} dari antrean?", listOf(item.id)) })
+                for (it in items) {
+                    card.addView(View(c).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.MATCH, Ui.dp(c, 1)).apply { topMargin = Ui.dp(c, 10) })
+                    val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    val rt = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+                    rt.addView(Ui.text(c, Queue.shown(it), 14f, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
+                    rt.addView(Ui.text(c, Xfer.size(it.size) + if (it.id == cur) " · sedang dikirim" else "", 12f, false, if (it.id == cur) Ui.ACCENT else Ui.MUTED))
+                    row.addView(rt, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+                    if (it.id != cur) {
+                        val item = it
+                        row.addView(smallBtn(c, "Pindah", Ui.ACCENT) { askFolder("Pindahkan ${Queue.shown(item)} ke", item.folder, listOf(item.id)) })
+                        row.addView(smallBtn(c, "Hapus", Ui.DANGER) { askRemove("Hapus ${Queue.shown(item)} dari antrean?", listOf(item.id)) })
+                    }
+                    card.addView(row, Ui.lp(c, t = 6))
                 }
-                card.addView(row, Ui.lp(c, t = 6))
             }
             list.addView(card, Ui.lp(c, t = 12))
         }

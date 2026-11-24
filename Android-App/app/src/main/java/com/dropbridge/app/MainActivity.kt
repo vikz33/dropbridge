@@ -226,7 +226,7 @@ class MainActivity : Activity() {
             inputType = InputType.TYPE_CLASS_TEXT
             setAdapter(folderAdapter)
             threshold = 1
-            setText(Prefs.lastFolder)
+            setText(Prefs.startFolder())
             setDropDownBackgroundDrawable(Ui.rounded(c, Ui.CARD, 12, Ui.LINE))
         }
         Ui.styleInput(c, folderEdit, "Ketik atau pilih folder")
@@ -451,7 +451,7 @@ class MainActivity : Activity() {
             val shrink = Prefs.shrinkPhotos
             val app = applicationContext
             Thread {
-                val ok = Queue.addFile(f, name, folder, shrink) != null
+                val ok = Queue.addFile(f, name, folder, shrink, Queue.autoMode(folder)) != null
                 runOnUiThread {
                     if (ok) {
                         Toast.makeText(app, "Foto ke-$n masuk antrean ${pathLabel(folder)}", Toast.LENGTH_SHORT).show()

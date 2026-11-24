@@ -77,7 +77,7 @@ object Uploader {
 
                 if (!began) { Xfer.begin(); began = true }
                 val cur = items[0]
-                Xfer.file(cur.name, cur.size, Xfer.doneCount + items.size, Xfer.doneBefore + items.sumOf { it.size })
+                Xfer.file(Queue.shown(cur), cur.size, Xfer.doneCount + items.size, Xfer.doneBefore + items.sumOf { it.size })
                 var lastReport = 0L
                 val dest = Queue.label(cur.folder)
                 currentId = cur.id
@@ -92,21 +92,21 @@ object Uploader {
                             val eta = Xfer.eta().let { if (it.isEmpty()) "" else " · $it" }
                             val line = "Mengirim ${Xfer.index} dari ${Xfer.count} ke $dest: ${Xfer.percent()}%$sp$eta"
                             Status.line = line
-                            report("${cur.name} → $dest\n$line", Xfer.percent())
+                            report("${Queue.shown(cur)} → $dest\n$line", Xfer.percent())
                         }
                     }
                     Xfer.fileDone(cur.size)
                     Queue.remove(cur.id)
                     if (real.folder.isNotEmpty()) { Prefs.lastFolder = real.folder; Prefs.rememberTarget(real.folder) }
                     Status.line = if (real.duplicate) "Sudah ada di PC: ${real.name} → $dest (tidak dikirim ulang)"
-                        else "Terkirim: ${cur.name} → $dest"
+                        else "Terkirim: ${real.name} → $dest"
                 } catch (e: NetError) {
                     if (e.code == 401) {
                         Prefs.token = ""
                     } else if (e.code in 400..499 && e.code != 408 && e.code != 429) {
                         // Ditolak PC (mis. kebesaran): jangan diulang terus.
                         Queue.remove(cur.id)
-                        Status.line = "Ditolak PC: ${cur.name} (${e.message})"
+                        Status.line = "Ditolak PC: ${Queue.shown(cur)} (${e.message})"
                     } else {
                         nap(5000)
                     }

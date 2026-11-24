@@ -568,6 +568,58 @@ class LocalStorage:
             shutil.move(str(tmp), str(d / final))
         return final, False
 
+    def _find_same_any(self, d: Path, tmp: Path) -> Optional[str]:
+        """Cari file mana pun di folder yang isinya persis sama dengan tmp (untuk nama otomatis)."""
+        size = tmp.stat().st_size
+        digest = None
+        try:
+            entries = list(os.scandir(d))
+        except OSError:
+            return None
+        for e in entries:
+            try:
+                if not e.is_file() or e.stat().st_size != size:
+                    continue
+            except OSError:
+                continue
+            if digest is None:
+                digest = self._sha256(tmp)
+            if self._sha256(Path(e.path)) == digest:
+                return e.name
+        return None
+
+    def commit_numbered(self, tmp: Path, folder: str, base: str, name: str) -> Tuple[str, bool]:
+        """Simpan tmp dengan nama otomatis "<base> NN.<ekstensi>"; nomor lanjut dari yang terbesar di folder.
+
+        Nomor diberikan di sini (saat file sampai), bukan di HP, karena HP tidak tahu isi folder saat PC mati.
+        Bila isi file sudah ada di folder (kiriman diulang), tidak disimpan ulang.
+        """
+        d = self._folder_dir(folder)
+        same = self._find_same_any(d, tmp)
+        if same:
+            tmp.unlink(missing_ok=True)
+            return same, True
+        stem = self.sanitize_file(base or "Foto") or "Foto"
+        ext = os.path.splitext(self.sanitize_file(name))[1]
+        pat = re.compile(r"^" + re.escape(stem) + r" (\d+)(\.[^.]*)?$", re.IGNORECASE)
+        top = 0
+        try:
+            for e in os.scandir(d):
+                m = pat.match(e.name)
+                if m:
+                    top = max(top, int(m.group(1)))
+        except OSError:
+            pass
+        n = top + 1
+        while (d / f"{stem} {n:02d}{ext}").exists():
+            n += 1
+        final = f"{stem} {n:02d}{ext}"
+        try:
+            os.replace(tmp, d / final)
+        except OSError:
+            shutil.move(str(tmp), str(d / final))
+        return final, False
+
     def clean_stale_parts(self, max_age_s: float = 3 * 86400) -> int:
         """Hapus sisa kiriman yang tidak pernah selesai (lebih dari 3 hari)."""
         n = 0

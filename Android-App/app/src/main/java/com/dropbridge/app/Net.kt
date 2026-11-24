@@ -422,6 +422,7 @@ object Net {
             var url = "$base/api/files/upload-raw?folder=${enc(item.folder)}&name=${enc(item.name)}" +
                 "&uid=${enc(item.id)}&offset=$offset&total=$total"
             if (item.modified > 0) url += "&last_modified=${item.modified}"
+            if (item.mode.isNotEmpty()) url += "&seq=${enc(Queue.seqBase(item))}"
             val c = URL(url).openConnection() as HttpURLConnection
             try {
                 c.requestMethod = "POST"

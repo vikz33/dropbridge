@@ -1,7 +1,7 @@
 # DropBridge — Ringkasan Proyek untuk Melanjutkan
 
 > Dokumen serah-terima untuk Claude di chat lain. Baca seluruhnya sebelum mengerjakan apa pun.
-> Kondisi per **16 November 2026**, versi terakhir **PC 3.3.0 · Android 3.3.0** (commit `c094def`).
+> Kondisi per **16 November 2026**, versi terakhir **PC 3.3.1 · Android 3.3.1** (belum diuji di HP; sebelumnya 3.3.0, commit `c094def`).
 
 ---
 
@@ -120,6 +120,7 @@ File utama (paket `com.dropbridge.app`):
 | **3.2.0** | laptop → laptop lain (relay), laptop → HP (outbox), penanda file sudah di HP (Pasang/Buka/lokasi) |
 | **3.2.1** | cek denyut 10 dtk (status laptop tidak basi), tamu browser tampil di peta & HP lain, "Host aktif" → "Berbagi aktif" |
 | **3.3.0** | tab **Ekosistem** (ikon orbit), ikon Kirim pesawat kertas; **Kirim › Ganti → Kirim ke mana?** (Laptop / HP tanpa aplikasi lewat QR, QR langsung di tab Kirim); planet → Kirim ke sini; peringatan laptop tidak terjangkau + antrean |
+| **3.3.1** | **Antrean per folder** (ciut/buka, Buka semua), kartu **Nama file** (Asli / Otomatis / Sendiri; nomor diberikan PC lewat `seq`), **folder bawaan = Tanpa folder** (Pengaturan › Pengiriman: Tanpa folder / Terakhir dipakai / Folder tertentu) |
 
 Catatan: fitur Android 3.2.0–3.3.0 baru **lolos kompilasi**, belum terbukti di HP sungguhan (lihat bagian 9).
 

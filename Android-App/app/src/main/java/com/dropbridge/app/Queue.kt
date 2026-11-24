@@ -8,13 +8,17 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-class Item(
+data class Item(
     val id: String,
     val path: String,
     val name: String,
     val folder: String,
     val modified: Long,
     val size: Long,
+    /** "" = nama asli; "foto" | "folder" | "tanggal" | "custom" = PC memberi nama + nomor urut saat file sampai. */
+    val mode: String = "",
+    /** Nama dasar untuk mode "custom". */
+    val base: String = "",
 )
 
 /**
@@ -38,7 +42,7 @@ object Queue {
             val arr = JSONArray(f.readText())
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                out.add(Item(o.getString("id"), o.getString("path"), o.getString("name"), o.getString("folder"), o.optLong("modified"), o.optLong("size")))
+                out.add(Item(o.getString("id"), o.getString("path"), o.getString("name"), o.getString("folder"), o.optLong("modified"), o.optLong("size"), o.optString("mode"), o.optString("base")))
             }
         } catch (e: Exception) { /* indeks rusak: mulai kosong */ }
         return out
@@ -47,7 +51,7 @@ object Queue {
     private fun save(list: List<Item>) {
         val arr = JSONArray()
         for (it in list) {
-            arr.put(JSONObject().put("id", it.id).put("path", it.path).put("name", it.name).put("folder", it.folder).put("modified", it.modified).put("size", it.size))
+            arr.put(JSONObject().put("id", it.id).put("path", it.path).put("name", it.name).put("folder", it.folder).put("modified", it.modified).put("size", it.size).put("mode", it.mode).put("base", it.base))
         }
         val tmp = File(ctx!!.filesDir, "queue.json.tmp")
         tmp.writeText(arr.toString())
@@ -73,13 +77,41 @@ object Queue {
     /** Pindahkan file di antrean ke folder lain sebelum dikirim. */
     fun setFolder(ids: Collection<String>, folder: String) = synchronized(lock) {
         val set = ids.toSet()
-        save(load().map { if (it.id in set) Item(it.id, it.path, it.name, folder, it.modified, it.size) else it })
+        save(load().map { if (it.id in set) it.copy(folder = folder) else it })
     }
 
     /** Antrean dikelompokkan per folder tujuan, urut sesuai antrean. */
     fun groups(): List<Pair<String, List<Item>>> = all().groupBy { it.folder }.toList()
 
     fun label(folder: String): String = pathLabel(folder)
+
+    /** Mode nama otomatis dari Pengaturan/kartu Nama file ("" = nama asli). */
+    fun autoMode(folder: String): String {
+        if (Prefs.nameMode != "otomatis") return ""
+        return when (Prefs.namePattern) {
+            "folder" -> if (folder.isEmpty()) "foto" else "folder"
+            "tanggal" -> "tanggal"
+            else -> "foto"
+        }
+    }
+
+    /** Ekstensi dengan titik, mis. ".jpg" (kosong bila tidak ada). */
+    fun ext(name: String): String {
+        val i = name.lastIndexOf('.')
+        return if (i > 0) name.substring(i) else ""
+    }
+
+    /** Nama dasar penomoran otomatis. Nama folder ber-garis-miring dipakai bagian terakhirnya. */
+    fun seqBase(it: Item): String = when (it.mode) {
+        "folder" -> it.folder.substringAfterLast('/').trim().ifEmpty { "Foto" }
+        "tanggal" -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date(if (it.modified > 0) it.modified else System.currentTimeMillis()))
+        "custom" -> it.base.trim().ifEmpty { "Foto" }
+        else -> "Foto"
+    }
+
+    /** Nama untuk daftar: nama asli, atau "Nama ##.jpg" bila nomornya baru diberikan PC saat file sampai. */
+    fun shown(it: Item): String = if (it.mode.isEmpty()) it.name else seqBase(it) + " ##" + ext(it.name)
 
     fun clear() = synchronized(lock) {
         for (it in load()) File(it.path).delete()
@@ -92,6 +124,8 @@ object Queue {
         } ?: 0L
     } catch (e: Exception) { 0L }
 
+    fun nameOf(c: Context, uri: Uri): String = queryName(c, uri)
+
     private fun queryName(c: Context, uri: Uri): String {
         try {
             c.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cur ->
@@ -102,7 +136,7 @@ object Queue {
     }
 
     /** Pindahkan file milik aplikasi (mis. hasil kamera) langsung ke antrean, tanpa menyalin. */
-    fun addFile(src: File, name: String, folder: String, shrink: Boolean): Item? {
+    fun addFile(src: File, name: String, folder: String, shrink: Boolean, mode: String = ""): Item? {
         if (!src.isFile || src.length() <= 0) return null
         val id = UUID.randomUUID().toString().replace("-", "")
         val dest = File(dir(), id)
@@ -114,7 +148,7 @@ object Queue {
         if (shrink && dest.length() > ImageShrink.MAX_BYTES && ImageShrink.shrink(dest)) {
             finalName = ImageShrink.jpgName(name)
         }
-        val item = Item(id, dest.absolutePath, finalName, folder, System.currentTimeMillis(), dest.length())
+        val item = Item(id, dest.absolutePath, finalName, folder, System.currentTimeMillis(), dest.length(), mode)
         synchronized(lock) {
             val list = load()
             list.add(item)
@@ -124,7 +158,7 @@ object Queue {
     }
 
     /** Salin satu file ke antrean. Mengembalikan null jika gagal dibaca. */
-    fun add(c: Context, uri: Uri, folder: String, shrink: Boolean = true): Item? {
+    fun add(c: Context, uri: Uri, folder: String, shrink: Boolean = true, mode: String = "", base: String = "", rename: String? = null): Item? {
         try {
             var name = queryName(c, uri)
             var modified = queryLong(c, uri, "datetaken")
@@ -154,7 +188,8 @@ object Queue {
                 size = dest.length()
                 name = ImageShrink.jpgName(name)
             }
-            val item = Item(id, dest.absolutePath, name, folder, modified, size)
+            if (rename != null) name = rename.trim().ifEmpty { name.substringBeforeLast('.') } + ext(name)
+            val item = Item(id, dest.absolutePath, name, folder, modified, size, mode, base)
             synchronized(lock) {
                 val list = load()
                 list.add(item)

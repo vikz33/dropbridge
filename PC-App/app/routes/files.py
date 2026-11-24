@@ -61,12 +61,16 @@ async def upload_raw(
     uid: Optional[str] = None,
     offset: int = 0,
     total: Optional[int] = None,
+    seq: Optional[str] = None,
 ):
     """Unggah cepat: isi body = isi file mentah (tanpa multipart), langsung ditulis ke disk.
 
     Dengan `uid`, kiriman bisa dilanjutkan: potongan yang sudah sampai disimpan walau koneksi
     putus, lalu HP mengirim sisanya mulai dari `offset`. File baru dianggap selesai bila
     ukurannya sama dengan `total`.
+
+    Dengan `seq` (nama dasar), file disimpan sebagai "<seq> NN.<ekstensi>" dengan nomor lanjut dari
+    nomor terbesar di folder; `name` tetap dipakai untuk ekstensi.
     """
     t0 = time.monotonic()
     folder_name, _ = storage.ensure_folder(folder)
@@ -136,7 +140,10 @@ async def upload_raw(
             # Potongan tidak cocok dengan ukuran file: buang, minta HP kirim ulang dari awal.
             storage.discard(tmp)
             return JSONResponse({"detail": "Ukuran tidak cocok, kirim ulang dari awal.", "offset": 0}, status_code=409)
-    final, dup = storage.commit(tmp, folder_name, clean)
+    if seq and seq.strip():
+        final, dup = storage.commit_numbered(tmp, folder_name, seq.strip(), clean)
+    else:
+        final, dup = storage.commit(tmp, folder_name, clean)
     if last_modified and not dup:
         storage.set_mtime(folder_name, final, last_modified)
     if not dup:

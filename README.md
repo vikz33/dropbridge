@@ -50,6 +50,13 @@ yang sudah terhubung tidak berbeda.
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
 
+## Antrean per folder, nama file, folder bawaan (PC 3.3.1 · Android 3.3.1)
+
+- **Antrean per folder**: tiap folder satu baris (nama, jumlah file + ukuran, status Menunggu/Mengirim). Ketuk untuk buka atau tutup; "Buka semua / Ciutkan semua" di atas daftar. Satu folder langsung terbuka, dua atau lebih tertutup. Ganti folder dan Hapus folder ini ada di dalam folder yang terbuka. Folder yang sedang mengirim menampilkan progres di barisnya saat tertutup.
+- **Nama file** (kartu baru di Kirim ke…): **Asli** (bawaan), **Otomatis** (Foto 01, Nama folder 01, atau Tanggal 01), atau **Sendiri** (nama dasar + nomor, atau ubah satu per satu; ekstensi tidak bisa terhapus). Pilihan Asli/Otomatis dan polanya diingat; Sendiri hanya untuk kiriman itu. Bawaan juga bisa diatur di Pengaturan › Pengiriman › Nama file bawaan; berlaku untuk Foto langsung dan Pilih file.
+- **Nomor diberikan PC** saat file sampai (`seq` di `/api/files/upload-raw`): lanjut dari nomor terbesar di folder tujuan, jadi tetap benar walau PC mati saat difoto. Di Antrean nama tampil "Foto ##.jpg". Nama folder ber-garis-miring memakai bagian terakhirnya; karakter terlarang Windows dibersihkan. Kiriman yang diulang tidak tersimpan dua kali (isi file dibandingkan dengan semua file seukuran di folder itu).
+- **Folder bawaan**: layar Kirim selalu dibuka dengan **Tanpa folder**. Pengaturan › Pengiriman › Folder bawaan: Tanpa folder (bawaan), Terakhir dipakai, atau Folder tertentu. Folder tertentu yang sudah tidak ada di PC kembali ke Tanpa folder. "Terakhir dipakai" tetap ada di lembar Pilih folder.
+
 ## Satu pintu kirim dan Ekosistem (PC 3.3.0 · Android 3.3.0)
 
 - Tab Hubungkan sekarang bernama **Ekosistem** (ikon orbit); ikon Kirim jadi pesawat kertas. Web, Windows, Linux, dan aplikasi sama.

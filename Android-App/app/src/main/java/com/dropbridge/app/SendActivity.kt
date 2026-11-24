@@ -34,6 +34,13 @@ class SendActivity : Activity() {
     private lateinit var folderAdapter: ArrayAdapter<String>
     private var known: List<String> = emptyList()
 
+    // Kartu Nama file: "asli" | "otomatis" | "sendiri" (sendiri hanya berlaku untuk kiriman ini)
+    private var nameMode = Prefs.nameMode
+    private var customBase = ""
+    private val perFile = HashMap<Int, String>()      // nomor file -> nama tanpa ekstensi (Ubah satu per satu)
+    private val nameCache = HashMap<Int, String>()
+    private lateinit var nameCard: LinearLayout
+
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     @Suppress("DEPRECATION")
@@ -112,7 +119,7 @@ class SendActivity : Activity() {
             inputType = InputType.TYPE_CLASS_TEXT
             setAdapter(folderAdapter)
             threshold = 1
-            setText(Prefs.lastFolder)
+            setText(Prefs.startFolder())
             setSelection(text.length)
             setDropDownBackgroundDrawable(Ui.rounded(c, Ui.CARD, 12, Ui.LINE))
             addTextChangedListener(object : TextWatcher {
@@ -164,6 +171,9 @@ class SendActivity : Activity() {
         shrinkRow.addView(shrinkSwitch)
         shrinkCard.addView(shrinkRow)
         col.addView(shrinkCard, Ui.lp(c, t = 12))
+
+        nameCard = Ui.card(c, Ui.CARD, 14)
+        col.addView(nameCard, Ui.lp(c, t = 12))
 
         updateInfo()
         refreshChips()
@@ -240,6 +250,7 @@ class SendActivity : Activity() {
                 info2.text = "Siap dikirim ke PC"
                 sendBtn.text = "Kirim ${uris.size} file"
                 sendBtn.isEnabled = true
+                renderName()
             }
             sharedText.isNotEmpty() -> {
                 info.text = "Teks dibagikan"
@@ -299,21 +310,203 @@ class SendActivity : Activity() {
     }
 
     private fun updateHint() {
-        val t = cleanPath(folderEdit.text.toString())
+        val rawFolder = folderEdit.text.toString()
+        val isRoot = FolderPicker.isRoot(rawFolder)
+        val t = cleanPath(rawFolder)
         val exists = t.isNotEmpty() && known.any { it.equals(t, ignoreCase = true) }
         val depth = if (t.isEmpty()) 0 else t.count { it == '/' } + 1
         folderHint.text = when {
+            isRoot -> "Langsung di penyimpanan"
             t.isEmpty() -> ""
             depth > MAX_DEPTH -> "Maks. $MAX_DEPTH tingkat"
             exists -> "Sudah ada di PC"
             t.contains('/') -> "Subfolder baru"
             else -> "Folder baru"
         }
-        folderHint.setTextColor(if (depth > MAX_DEPTH) Ui.DANGER else if (exists) Ui.ACCENT else Ui.MUTED)
+        folderHint.setTextColor(if (depth > MAX_DEPTH) Ui.DANGER else if (exists || isRoot) Ui.ACCENT else Ui.MUTED)
         // Peringatan salah ketik: nama hampir sama dengan folder yang sudah ada
-        val similar = if (!exists && t.length >= 4) known.filter { withinOneEdit(it, t) }.take(3) else emptyList()
+        val similar = if (!exists && !isRoot && t.length >= 4) known.filter { withinOneEdit(it, t) }.take(3) else emptyList()
         hint.text = "Mirip dengan: ${similar.joinToString(", ") { pathLabel(it) }}. Salah ketik?"
         hint.visibility = if (similar.isEmpty()) View.GONE else View.VISIBLE
+        if (nameMode == "otomatis") renderName()
+    }
+
+    // ---------- Nama file ----------
+
+    private fun folderNow(): String =
+        if (FolderPicker.isRoot(folderEdit.text.toString())) "" else cleanPath(folderEdit.text.toString())
+
+    /** Pola yang berlaku: "Nama folder 01" tidak bisa dipakai bila tujuannya Tanpa folder. */
+    private fun effectivePattern(folder: String): String = when (Prefs.namePattern) {
+        "folder" -> if (folder.isEmpty()) "foto" else "folder"
+        "tanggal" -> "tanggal"
+        else -> "foto"
+    }
+
+    private fun origName(i: Int): String = nameCache.getOrPut(i) { Queue.nameOf(this, uris[i]) }
+
+    private fun chooseNameMode(key: String) {
+        nameMode = key
+        if (key != "sendiri") Prefs.nameMode = key
+        renderName()
+    }
+
+    private fun renderName() {
+        if (!::nameCard.isInitialized) return
+        nameCard.visibility = if (uris.isEmpty()) View.GONE else View.VISIBLE
+        if (uris.isEmpty()) return
+        val c: android.content.Context = this
+        nameCard.removeAllViews()
+        nameCard.addView(Ui.text(c, "Nama file", 16f, true, Ui.INK))
+        val seg = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = Ui.rounded(c, Ui.FIELD, 12)
+            setPadding(Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4))
+        }
+        for ((key, label) in listOf("asli" to "Asli", "otomatis" to "Otomatis", "sendiri" to "Sendiri")) {
+            val on = nameMode == key
+            seg.addView(Ui.text(c, label, 14f, true, if (on) Ui.INK else Ui.MUTED).apply {
+                gravity = android.view.Gravity.CENTER
+                minimumHeight = Ui.dp(c, 44)
+                isClickable = true
+                isFocusable = true
+                contentDescription = "Nama file $label" + if (on) ", dipilih" else ""
+                background = if (on) Ui.rounded(c, Ui.CARD, 9, Ui.LINE) else null
+                setOnClickListener { if (!on) chooseNameMode(key) }
+            }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        }
+        nameCard.addView(seg, Ui.lp(c, t = 10))
+
+        val folder = folderNow()
+        var previewBox: TextView? = null
+        var note = ""
+        when (nameMode) {
+            "otomatis" -> {
+                val eff = effectivePattern(folder)
+                val chipRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+                for ((key, label) in listOf("folder" to "Nama folder 01", "foto" to "Foto 01", "tanggal" to "Tanggal 01")) {
+                    val off = key == "folder" && folder.isEmpty()
+                    val on = !off && eff == key
+                    chipRow.addView(Ui.text(c, label, 14f, true, if (on) Ui.DEEP else Ui.MUTED).apply {
+                        background = if (on) Ui.rounded(c, Ui.SOFT, 999, Ui.ACCENT) else Ui.rounded(c, Ui.FIELD, 999)
+                        setPadding(Ui.dp(c, 14), Ui.dp(c, 10), Ui.dp(c, 14), Ui.dp(c, 10))
+                        alpha = if (off) 0.5f else 1f
+                        isClickable = !off
+                        isFocusable = !off
+                        contentDescription = label + if (off) ", aktif bila memilih folder" else if (on) ", dipilih" else ""
+                        setOnClickListener { Prefs.namePattern = key; renderName() }
+                    }, Ui.lp(c, Ui.WRAP, Ui.WRAP, r = 8))
+                }
+                nameCard.addView(android.widget.HorizontalScrollView(c).apply {
+                    isHorizontalScrollBarEnabled = false
+                    addView(chipRow)
+                }, Ui.lp(c, t = 10))
+                if (folder.isEmpty()) nameCard.addView(Ui.text(c, "\"Nama folder 01\" aktif bila memilih folder.", 12f, false, Ui.MUTED), Ui.lp(c, t = 6))
+                note = "Nomor diberikan PC saat file sampai, dan lanjut dari nomor terakhir di folder."
+            }
+            "sendiri" -> {
+                nameCard.addView(Ui.caption(c, "Nama dasar"), Ui.lp(c, t = 12))
+                nameCard.addView(Ui.input(c, "Mis. Lembar muat", InputType.TYPE_CLASS_TEXT, customBase).apply {
+                    addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+                        override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+                        override fun afterTextChanged(e: Editable?) {
+                            customBase = e?.toString() ?: ""
+                            previewBox?.text = previewText()
+                        }
+                    })
+                }, Ui.lp(c, t = 6))
+                note = "Kosong = nama asli. Nomor diberikan PC saat file sampai."
+            }
+            else -> note = "Nama tetap seperti di HP. Pilihan bawaan."
+        }
+
+        val pv = Ui.mono(Ui.text(c, previewText(), 13f, false, Ui.INK)).apply {
+            background = Ui.rounded(c, Ui.FIELD, 12)
+            setPadding(Ui.dp(c, 12), Ui.dp(c, 10), Ui.dp(c, 12), Ui.dp(c, 10))
+        }
+        previewBox = pv
+        nameCard.addView(Ui.caption(c, "Hasilnya di PC"), Ui.lp(c, t = 12))
+        nameCard.addView(pv, Ui.lp(c, t = 6))
+        nameCard.addView(Ui.text(c, note, 12f, false, Ui.MUTED), Ui.lp(c, t = 6))
+        if (nameMode == "sendiri") {
+            nameCard.addView(Ui.text(c, "Ubah satu per satu ›", 14f, true, Ui.ACCENT).apply {
+                minimumHeight = Ui.dp(c, 44)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { editEach() }
+            }, Ui.lp(c, t = 4))
+        }
+    }
+
+    /** Contoh nama hasil untuk 3 file pertama. */
+    private fun previewText(): String {
+        val n = uris.size
+        val lines = ArrayList<String>()
+        val folder = folderNow()
+        for (i in 0 until minOf(3, n)) {
+            val orig = origName(i)
+            val ext = Queue.ext(orig)
+            lines.add(
+                when (nameMode) {
+                    "otomatis" -> {
+                        val base = when (effectivePattern(folder)) {
+                            "folder" -> folder.substringAfterLast('/').trim().ifEmpty { "Foto" }
+                            "tanggal" -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                            else -> "Foto"
+                        }
+                        base + " " + String.format(java.util.Locale.US, "%02d", i + 1) + ext
+                    }
+                    "sendiri" -> {
+                        val per = perFile[i]
+                        if (per != null) per + ext
+                        else if (customBase.isBlank()) orig
+                        else customBase.trim() + " " + String.format(java.util.Locale.US, "%02d", i + 1) + ext
+                    }
+                    else -> orig
+                }
+            )
+        }
+        if (n > 3) lines.add("… dan ${n - 3} file lain")
+        return lines.joinToString("\n")
+    }
+
+    /** Dialog nama tiap file (hanya bagian depan; ekstensi tidak bisa terhapus). */
+    private fun editEach() {
+        val c: android.content.Context = this
+        val box = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(c, 20), Ui.dp(c, 8), Ui.dp(c, 20), 0)
+        }
+        val edits = ArrayList<android.widget.EditText>()
+        for (i in uris.indices) {
+            val orig = origName(i)
+            val ext = Queue.ext(orig)
+            val stem = if (ext.isEmpty()) orig else orig.removeSuffix(ext)
+            val e = Ui.input(c, "Nama file", InputType.TYPE_CLASS_TEXT, perFile[i] ?: stem)
+            edits.add(e)
+            val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+            row.addView(e, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            row.addView(Ui.text(c, ext, 14f, false, Ui.MUTED), Ui.lp(c, Ui.WRAP, Ui.WRAP, l = 8))
+            box.addView(row, Ui.lp(c, t = 8))
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Ubah nama satu per satu")
+            .setView(android.widget.ScrollView(c).apply { addView(box) })
+            .setPositiveButton("Simpan") { _, _ ->
+                perFile.clear()
+                for (i in edits.indices) {
+                    val orig = origName(i)
+                    val ext = Queue.ext(orig)
+                    val stem = if (ext.isEmpty()) orig else orig.removeSuffix(ext)
+                    val t = edits[i].text.toString().trim()
+                    if (t.isNotEmpty() && t != stem) perFile[i] = t
+                }
+                renderName()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     private fun loadFolders() {
@@ -387,9 +580,24 @@ class SendActivity : Activity() {
         val app = applicationContext
         val shrink = shrinkSwitch.isChecked
         val label = if (folder.isEmpty()) "Tanpa folder" else pathLabel(folder)
+        val mode = nameMode
+        val auto = if (mode == "otomatis") effectivePattern(folder) else ""
+        val base = customBase.trim()
+        val per = HashMap(perFile)
         Thread {
             var n = 0
-            for (u in list) if (Queue.add(app, u, folder, shrink) != null) n++
+            for ((i, u) in list.withIndex()) {
+                val added = when (mode) {
+                    "otomatis" -> Queue.add(app, u, folder, shrink, auto)
+                    "sendiri" -> when {
+                        per.containsKey(i) -> Queue.add(app, u, folder, shrink, rename = per[i])
+                        base.isNotEmpty() -> Queue.add(app, u, folder, shrink, "custom", base)
+                        else -> Queue.add(app, u, folder, shrink)
+                    }
+                    else -> Queue.add(app, u, folder, shrink)
+                }
+                if (added != null) n++
+            }
             if (folder.isNotEmpty()) Prefs.lastFolder = folder
             runOnUiThread {
                 if (n > 0) {
