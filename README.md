@@ -17,7 +17,7 @@ DropBridge/
                  DropBridge-<versi>.apk
                  (tidak masuk Git)
   build_semua.bat  build APK lalu installer PC sekaligus, hasil ke Rilis
-  rilis_github.bat  unggah hasil Windows ke GitHub Releases (Linux: PC-App/rilis_github.sh)
+  rilis_github.bat  unggah Setup.exe, .deb Linux, dan APK ke GitHub Releases (satu rilis)
 ```
 
 **Alur setiap pembaruan:** hentikan DropBridge (tray > Berhenti) > coba di `PC-App\start.bat` > kalau sudah oke,
@@ -65,7 +65,7 @@ yang sudah terhubung tidak berbeda.
 - **Perbarui sekarang**: mengunduh file untuk sistem itu, memeriksa SHA-256 terhadap berkas `.sha256` di rilis yang sama, lalu memasang.
   Windows: `Setup.exe` dijalankan senyap dengan izin administrator (UAC); installer menutup lalu membuka DropBridge lagi. Linux: `pkexec` + `apt` (kotak kata sandi sistem), dijalankan oleh proses terpisah karena paket menghentikan DropBridge yang sedang jalan.
 - **Pengaman**: tanpa `.sha256` tidak dipasang otomatis (hanya tautan ke halaman rilis); unduhan hanya dari repo ini lewat HTTPS; versi di nama file harus sama dengan versi rilis dan lebih baru; versi dari kode (`start.bat`/`start.sh`) tidak memasang sendiri.
-- **Setiap rilis** (setelah `git push`): `build_semua.bat` lalu `rilis_github.bat` di Windows; `bash build_deb.sh` lalu `bash rilis_github.sh` di Linux Mint. Urutannya bebas, rilis dibuat dari yang pertama mengunggah. Perlu sekali: GitHub CLI (`gh auth login`). Catatan rilis (butir `- ...`) di `Rilis\catatan-<versi>.md` tampil di kartu pembaruan.
+- **Setiap rilis** (setelah `git push`): `build_semua.bat` lalu `rilis_github.bat`, semuanya dari Windows. `build_semua.bat` membuat APK, Setup.exe, dan `.deb` Linux (skrip `PC-App/tools/build_deb.py`, tanpa Linux/WSL); `rilis_github.bat` mengunggah semuanya ke satu rilis. `build_deb.sh` dan `rilis_github.sh` di Linux masih bisa dipakai, hasilnya sama. Perlu sekali: GitHub CLI (`gh auth login`). Catatan rilis (butir `- ...`) di `Rilis\catatan-<versi>.md` tampil di kartu pembaruan.
 - Versi pertama yang punya fitur ini (3.3.2) harus dipasang manual sekali; pembaruan berikutnya bisa dari aplikasi.
 
 ## Antrean per folder, nama file, folder bawaan (PC 3.3.1 · Android 3.3.1)

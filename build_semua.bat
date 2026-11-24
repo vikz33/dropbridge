@@ -19,12 +19,16 @@ echo ==========================================================
 echo   Build DropBridge: PC %PCVER%  ^|  Android %ANVER%
 echo ==========================================================
 echo.
-echo ---- 1/2  Aplikasi Android ----
+echo ---- 1/3  Aplikasi Android ----
 call "%ROOT%Android-App\build_apk.bat" nopause
 if errorlevel 1 goto gagal
 echo.
-echo ---- 2/2  Installer PC ----
+echo ---- 2/3  Installer PC ----
 call "%ROOT%PC-App\build_exe.bat" nopause
+if errorlevel 1 goto gagal
+echo.
+echo ---- 3/3  Paket Linux (.deb) ----
+"%ROOT%PC-App\.venv\Scripts\python.exe" "%ROOT%PC-App\tools\build_deb.py"
 if errorlevel 1 goto gagal
 
 echo.
@@ -32,7 +36,8 @@ echo ==========================================================
 echo   SELESAI. Di folder Rilis:
 echo     DropBridge-Setup-%PCVER%.exe   (berisi APK %ANVER%)
 echo     DropBridge-%ANVER%.apk
-echo   Bagikan cukup file Setup-nya.
+echo     dropbridge_%PCVER%_amd64.deb   (Linux)
+echo   Bagikan cukup file Setup-nya (Windows) atau .deb (Linux).
 echo ==========================================================
 start "" explorer "%ROOT%Rilis"
 pause

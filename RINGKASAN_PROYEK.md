@@ -202,7 +202,7 @@ Catatan: fitur Android 3.2.0–3.3.0 baru **lolos kompilasi**, belum terbukti di
 ## 9b. Pembaruan dari GitHub (PC 3.3.2 · Android 3.3.2, 24 Nov 2026)
 
 - Laptop (Windows/Linux) mengecek GitHub Releases, mengunduh, memeriksa SHA-256, lalu memasang. Kode: `PC-App/app/updater.py` (hanya pustaka standar), `routes/update.py`, tampilan di `Web` (Pengaturan › Tentang), item tray di `desktop.py`.
-- Berkas rilis: Windows `DropBridge-Setup-<v>.exe`, Linux `dropbridge_<v>_amd64.deb`, masing-masing + `<nama>.sha256`. Tanpa `.sha256` = tidak dipasang otomatis. Skrip unggah: `rilis_github.bat` (root) dan `PC-App/rilis_github.sh`, keduanya menolak jalan bila masih ada commit belum di-push.
+- Berkas rilis: Windows `DropBridge-Setup-<v>.exe`, Linux `dropbridge_<v>_amd64.deb`, masing-masing + `<nama>.sha256`. Tanpa `.sha256` = tidak dipasang otomatis. Skrip unggah: `rilis_github.bat` (root, mengunggah exe + deb + apk sekaligus) dan `PC-App/rilis_github.sh`, keduanya menolak jalan bila masih ada commit belum di-push. `.deb` dibangun oleh `PC-App/tools/build_deb.py` (Python murni, jalan di Windows); venv dibuat saat pemasangan (postinst, butuh internet), bukan dibungkus.
 - Belum teruji di perangkat sungguhan (hanya diuji dengan server GitHub tiruan): pemasangan senyap Inno Setup (UAC, buka ulang, pilihan tugas autostart/firewall tetap seperti sebelumnya?) dan `pkexec`+`apt` di Mint. Uji sungguhan butuh rilis versi lebih tinggi dari yang terpasang.
 - Ilustrasi: kanvas Design "DropBridge 3.3.2 · Jeda dan jalur kirim" (papan "Laptop · ada versi baru" dan "proses memperbarui").
 

@@ -70,7 +70,7 @@ Auth: token Bearer setelah PIN. Aturan nama: karakter terlarang Windows (`/ \ : 
 - **Pengembangan**: jalankan `start.bat` (Windows) — selalu versi terbaru. Alur yang dipakai: coba dulu lewat `start.bat`, kalau cocok baru build.
 - **Build semua**: `build_semua.bat` di folder root (menghasilkan APK Android dan `Setup.exe` PC). Build per folder tetap ada (`build_apk.bat` di `Android-App`).
 - **Versi**: naikkan di `PC-App/app/version.py` dan `Android-App/app/build.gradle.kts` (`versionName` dan `versionCode`).
-- **Rilis ke GitHub** (untuk pembaruan dari dalam aplikasi): `git push`, `build_semua.bat`, lalu `rilis_github.bat` (Windows); di Mint `bash build_deb.sh` lalu `bash rilis_github.sh`. File rilis harus punya pasangan `.sha256`; tanpa itu aplikasi menolak memasang otomatis. Kode: `PC-App/app/updater.py`, rute `routes/update.py`, tampilan di Pengaturan › Tentang.
+- **Rilis ke GitHub** (untuk pembaruan dari dalam aplikasi): `git push`, `build_semua.bat` (APK + Setup.exe + .deb Linux), lalu `rilis_github.bat`, semua dari Windows. File rilis harus punya pasangan `.sha256`; tanpa itu aplikasi menolak memasang otomatis. Kode: `PC-App/app/updater.py`, rute `routes/update.py`, tampilan di Pengaturan › Tentang.
 - **Linux Mint**: sasaran setara Windows (jendela sendiri, file dari HP masuk ke laptop itu). Verifikasi status skrip jalannya di README sebelum mengandalkannya.
 - Lokasi simpan bawaan di `Documents`; tidak ada folder shared/kiriman di dalam folder proyek.
 

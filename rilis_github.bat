@@ -1,7 +1,7 @@
 @echo off
 setlocal
 REM Mengunggah hasil build Windows ke GitHub Releases, supaya DropBridge di laptop lain bisa memperbarui diri.
-REM Urutan tiap rilis:  1) git push   2) build_semua.bat   3) file ini (rilis_github.bat)
+REM Urutan tiap rilis:  1) git push   2) build_semua.bat (APK, Setup.exe, dan .deb Linux)   3) file ini (rilis_github.bat)
 REM Perlu sekali: winget install GitHub.cli   lalu   gh auth login
 REM Catatan rilis (tampil di Pengaturan > Tentang): tulis di Rilis\catatan-<versi>.md, satu butir per baris diawali "- ".
 REM Rilis dibuat sebagai draf, diisi berkas, baru diterbitkan, jadi tidak terlihat setengah jadi.
@@ -27,8 +27,13 @@ if errorlevel 1 (
 
 set "EXE=Rilis\DropBridge-Setup-%VER%.exe"
 set "APK=Rilis\DropBridge-%ANVER%.apk"
+set "DEB=Rilis\dropbridge_%VER%_amd64.deb"
 if not exist "%EXE%" (
   echo Belum ada %EXE%. Jalankan build_semua.bat dulu.
+  goto selesai_gagal
+)
+if not exist "%DEB%" (
+  echo Belum ada %DEB%. Jalankan build_semua.bat dulu ^(langkah 3 membuat paket Linux^).
   goto selesai_gagal
 )
 
@@ -47,7 +52,15 @@ if "%SHA%"=="" (
   goto selesai_gagal
 )
 > "%EXE%.sha256" echo %SHA%  DropBridge-Setup-%VER%.exe
-echo SHA-256: %SHA%
+echo SHA-256 Windows: %SHA%
+set "SHA2="
+for /f %%h in ('powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 -LiteralPath '%DEB%').Hash.ToLower()"') do set "SHA2=%%h"
+if "%SHA2%"=="" (
+  echo Gagal menghitung SHA-256 paket Linux.
+  goto selesai_gagal
+)
+> "%DEB%.sha256" echo %SHA2%  dropbridge_%VER%_amd64.deb
+echo SHA-256 Linux: %SHA2%
 
 set "NEWREL=0"
 gh release view "v%VER%" >nul 2>&1
@@ -61,7 +74,7 @@ if errorlevel 1 (
   if errorlevel 1 goto selesai_gagal
 )
 
-gh release upload "v%VER%" "%EXE%" "%EXE%.sha256" --clobber
+gh release upload "v%VER%" "%EXE%" "%EXE%.sha256" "%DEB%" "%DEB%.sha256" --clobber
 if errorlevel 1 goto selesai_gagal
 if exist "%APK%" gh release upload "v%VER%" "%APK%" --clobber
 
@@ -71,7 +84,7 @@ if "%NEWREL%"=="1" (
 )
 
 echo.
-echo SELESAI. Rilis v%VER% (Windows) ada di GitHub. Di Linux Mint, jalankan PC-App/rilis_github.sh setelah build_deb.sh
+echo SELESAI. Rilis v%VER% (Windows + Linux + APK) ada di GitHub.
 for /f "delims=" %%u in ('gh release view "v%VER%" --json url -q .url') do echo %%u
 if /i not "%~1"=="nopause" pause
 exit /b 0
