@@ -117,7 +117,7 @@ class MoreActivity : Activity() {
         )
         if (pcV.isNotEmpty()) {
             val bad = Ui.versionMismatch(appV, pcV)
-            val pill = Ui.text(c, if (bad) "Versi beda. Perbarui yang lebih lama." else "✓  Versi cocok", 12f, true, if (bad) Ui.WARN_TX else Ui.DEEP).apply {
+            val pill = Ui.text(c, if (bad) "Versi beda. Perbarui yang lebih lama." else if (appV != pcV) "✓  Cocok, beda perbaikan kecil. Sebaiknya samakan." else "✓  Versi sama", 12f, true, if (bad) Ui.WARN_TX else Ui.DEEP).apply {
                 background = Ui.rounded(c, if (bad) Ui.WARN_BG else Ui.SOFT, 999)
                 setPadding(Ui.dp(c, 12), Ui.dp(c, 5), Ui.dp(c, 12), Ui.dp(c, 5))
             }
@@ -243,19 +243,31 @@ class MoreActivity : Activity() {
         if (Ui.themeStale(this, builtDark)) { recreate(); return }
         val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
         val ok = android.os.Build.VERSION.SDK_INT < 23 || pm.isIgnoringBatteryOptimizations(packageName)
-        bgVal.text = if (ok) "Sudah diizinkan" else "Belum diizinkan · disarankan agar kirim otomatis tidak dimatikan"
-        bgVal.setTextColor(if (ok) Ui.OK else Ui.WARN_TX)
+        val asked = Prefs.get("bgAsked") == "1"
+        // Sebagian HP (Honor/Huawei/Xiaomi/Oppo) menyimpan izin ini di menu buatan pabrik yang tidak bisa dibaca aplikasi.
+        bgVal.text = when {
+            ok -> "Sudah diizinkan"
+            asked -> "Sudah kamu atur. HP ini tidak bisa dicek aplikasi; abaikan bila sudah diizinkan."
+            else -> "Belum diizinkan · disarankan agar kirim otomatis tidak dimatikan"
+        }
+        bgVal.setTextColor(if (ok) Ui.OK else if (asked) Ui.MUTED else Ui.WARN_TX)
     }
 
     private fun openBatterySettings() {
+        Prefs.put("bgAsked", "1")
         try {
+            // Dialog resmi "Izinkan": ini yang membuat izin terbaca oleh aplikasi
+            startActivity(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:$packageName")))
+        } catch (e0: Exception) {
+          try {
             startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-        } catch (e: Exception) {
+          } catch (e: Exception) {
             try {
                 startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName")))
             } catch (e2: Exception) {
                 Toast.makeText(this, "Buka Pengaturan > Baterai > DropBridge, lalu izinkan jalan di latar belakang", Toast.LENGTH_LONG).show()
             }
+          }
         }
     }
 }
