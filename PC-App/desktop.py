@@ -77,6 +77,7 @@ try:
     from app.icon import icon_image
     from app.main import app
     from app.routes.system import android_info, welcome_due
+    from app.routes.update import updater
     from app.services import storage_admin
     from app.services.storage import StorageError
     from app.version import VERSION
@@ -293,6 +294,15 @@ class Desktop:
         except Exception:
             pass
 
+    def on_update(self, ver: str) -> None:
+        """Versi baru ada di GitHub (sekali per versi): beri tahu dan munculkan item di menu tray."""
+        self.notify(f"DropBridge {ver} tersedia. Buka Pengaturan > Tentang untuk memperbarui.", "Pembaruan tersedia")
+        try:
+            if self.icon:
+                self.icon.update_menu()
+        except Exception:
+            pass
+
     def on_approve(self, dev: dict) -> None:
         """HP baru memasukkan PIN yang benar: minta izin di jendela (halaman Ekosistem)."""
         name = dev.get("name") or dev.get("kind") or "HP baru"
@@ -441,6 +451,8 @@ class Desktop:
             ),
             pystray.MenuItem(f"PIN: {settings.pin}", None, enabled=False),
             pystray.MenuItem(ver, None, enabled=False),
+            pystray.MenuItem(lambda item: f"Perbarui ke {updater.status()['latest']}…", lambda i, it: self.show("#/pengaturan"),
+                             visible=lambda item: updater.status()["state"] == "available" and updater.status()["newer"]),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Mulai otomatis saat " + ("Windows" if os.name == "nt" else "laptop") + " menyala",
                              toggle_autostart, checked=lambda item: autostart_on()),
@@ -477,6 +489,7 @@ class Desktop:
         events.on("file", self.on_file)
         events.on("show", lambda route: self.show(route or None))
         events.on("approve", self.on_approve)
+        events.on("update", self.on_update)
         migrate_old_autostart()
 
         try:

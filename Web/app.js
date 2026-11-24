@@ -48,6 +48,9 @@
   let tgt = { t: 'self' };
   try { const x = JSON.parse(store.get('db_tgt') || 'null'); if (x && x.t) tgt = x; } catch { /* bawaan */ }
   let pcInfo = { version: '', os: '', name: '', url: '' };
+  let upd = null; // status pembaruan dari /api/update (hanya di laptop ini)
+  let updTimer = 0;
+  let updLater = ''; // versi yang ditunda dengan "Nanti" (sampai dibuka lagi)
 
   // ---------- Util ----------
   const fmtSize = (b) => {
@@ -429,6 +432,11 @@
   const inFolder = () => route.type === 'folder' || route.type === 'root';
 
   function applyRoute() {
+    if (location.hash === '#/pengaturan') { // dari menu tray: buka Pengaturan
+      history.replaceState(null, '', '#/');
+      renderSettings();
+      if (!$('#setDlg').open) $('#setDlg').showModal();
+    }
     route = parseHash();
     if (myRole !== 'full' && route.type !== 'send' && route.type !== 'more' && route.type !== 'welcome') {
       route = { type: 'send' };
@@ -1626,6 +1634,8 @@
     $('#verSub').textContent = [pcInfo.os, addr].filter(Boolean).join(' · ');
     $('#verNum').textContent = pcInfo.version;
     $('#dataRow').hidden = !myLocal;
+    renderUpdate();
+    if (myLocal) loadUpdate(false);
     $('#logout').hidden = onPc;
     $('#logout').textContent = 'Keluar dari ' + (pcInfo.name || 'laptop');
   }
@@ -1636,6 +1646,74 @@
     try { await api('/api/storage/open-data', { method: 'POST' }); toast('Folder data dibuka di laptop'); }
     catch (err) { toast(err.message, 'err'); }
   });
+
+  // ---------- Pembaruan dari GitHub (hanya di laptop ini) ----------
+  const updBusy = () => !!upd && ['downloading', 'verifying', 'installing'].includes(upd.state);
+  const mb = (b) => (b / 1048576).toFixed(1).replace('.', ',');
+  async function loadUpdate(check) {
+    if (!myLocal) return;
+    try {
+      upd = await api(check ? '/api/update/check' : '/api/update', check ? { method: 'POST' } : {});
+    } catch (err) { if (check) toast(err.message, 'err'); return; }
+    renderUpdate();
+    clearTimeout(updTimer);
+    if (updBusy() && $('#setDlg').open) updTimer = setTimeout(() => loadUpdate(false), 1000);
+  }
+  function renderUpdate() {
+    const row = $('#updRow'), card = $('#updCard');
+    row.hidden = !myLocal;
+    if (!myLocal || !upd) { card.hidden = true; return; }
+    const busy = updBusy();
+    const avail = upd.state === 'available' || busy;
+    const hm = (t) => new Date(t * 1000).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    $('#updSub').textContent = busy ? 'Sedang memperbarui…'
+      : upd.check_error ? upd.check_error
+      : avail ? 'Versi ' + upd.latest + ' tersedia'
+      : upd.checked_at ? 'Sudah versi terbaru · dicek ' + hm(upd.checked_at) : 'Belum dicek';
+    $('#updCheck').disabled = busy || upd.state === 'checking';
+    const later = updLater === upd.latest && !busy && !upd.error;
+    card.hidden = !avail || later;
+    if (card.hidden) return;
+    const canGo = upd.ready && upd.can_install;
+    const note = upd.error ? upd.error : (!upd.ready ? upd.missing : (!upd.can_install ? upd.blocked : ''));
+    card.classList.toggle('err', !!upd.error);
+    card.classList.toggle('warn', !upd.error && !!note);
+    $('#updTitle').textContent = 'Versi ' + upd.latest + ' tersedia';
+    $('#updMeta').textContent = [upd.size ? '±' + mb(upd.size) + ' MB' : '', 'dari GitHub'].filter(Boolean).join(' · ');
+    const ul = $('#updNotes');
+    ul.replaceChildren(...(upd.notes || []).map((t) => el('li', { text: t })));
+    let msg = note;
+    if (upd.state === 'downloading') msg = 'Mengunduh ' + mb(upd.done) + (upd.total ? ' dari ' + mb(upd.total) : '') + ' MB';
+    else if (upd.state === 'verifying') msg = 'Memeriksa keutuhan file (SHA-256)…';
+    else if (upd.state === 'installing') msg = upd.platform === 'linux'
+      ? 'Memasang… masukkan kata sandi laptop bila diminta. DropBridge akan tertutup lalu terbuka lagi.'
+      : 'Memasang… izinkan administrator bila diminta. DropBridge akan tertutup lalu terbuka lagi.';
+    $('#updMsg').textContent = msg;
+    $('#updMsg').hidden = !msg;
+    $('#updBar').hidden = !(upd.state === 'downloading' || upd.state === 'verifying');
+    $('#updBar i').style.width = (upd.state === 'verifying' ? 100 : upd.total ? Math.min(100, Math.round((upd.done / upd.total) * 100)) : 0) + '%';
+    $('#updGo').hidden = !canGo || upd.state === 'installing';
+    $('#updGo').disabled = busy;
+    $('#updGo').textContent = upd.error ? 'Coba lagi' : 'Perbarui sekarang';
+    $('#updCancel').hidden = upd.state !== 'downloading';
+    $('#updLater').hidden = busy;
+    $('#updPage').hidden = canGo && !upd.error;
+    if ((upd.page || '').startsWith('https://github.com/')) $('#updPage').href = upd.page;
+    $('#updFoot').hidden = !canGo;
+  }
+  $('#updCheck').addEventListener('click', () => loadUpdate(true));
+  $('#updLater').addEventListener('click', () => { if (upd) updLater = upd.latest; renderUpdate(); });
+  $('#updCancel').addEventListener('click', async () => {
+    try { upd = await api('/api/update/cancel', { method: 'POST' }); renderUpdate(); } catch (err) { toast(err.message, 'err'); }
+  });
+  $('#updGo').addEventListener('click', async () => {
+    try {
+      upd = await api('/api/update/install', { method: 'POST' });
+      renderUpdate();
+      loadUpdate(false);
+    } catch (err) { toast(err.message, 'err'); loadUpdate(false); }
+  });
+  $('#setDlg').addEventListener('close', () => clearTimeout(updTimer));
 
   // ---------- Login / sesi ----------
   let lastRefresh = 0;

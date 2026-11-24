@@ -17,6 +17,7 @@ DropBridge/
                  DropBridge-<versi>.apk
                  (tidak masuk Git)
   build_semua.bat  build APK lalu installer PC sekaligus, hasil ke Rilis
+  rilis_github.bat  unggah hasil Windows ke GitHub Releases (Linux: PC-App/rilis_github.sh)
 ```
 
 **Alur setiap pembaruan:** hentikan DropBridge (tray > Berhenti) > coba di `PC-App\start.bat` > kalau sudah oke,
@@ -49,6 +50,16 @@ yang sudah terhubung tidak berbeda.
 - **Sistem desain**: warna dan huruf dari `design/tokens.json`. Huruf Plus Jakarta Sans dan IBM Plex Mono
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
+
+## Pembaruan dari GitHub (PC 3.3.2 · Android 3.3.2)
+
+- **Pengecekan**: DropBridge di laptop (Windows `.exe` dan Linux `.deb`) mengecek rilis terbaru di GitHub Releases sekitar 30 detik setelah jalan, lalu tiap 12 jam. Tanpa internet: dilewati tanpa pesan. Matikan dengan `"update_check": false` di `config.json`; tombol **Cek sekarang** tetap bisa dipakai.
+- **Tampil di**: Pengaturan › Tentang (hanya di laptop, tidak di HP), satu notifikasi per versi, dan item "Perbarui ke …" di menu tray.
+- **Perbarui sekarang**: mengunduh file untuk sistem itu, memeriksa SHA-256 terhadap berkas `.sha256` di rilis yang sama, lalu memasang.
+  Windows: `Setup.exe` dijalankan senyap dengan izin administrator (UAC); installer menutup lalu membuka DropBridge lagi. Linux: `pkexec` + `apt` (kotak kata sandi sistem), dijalankan oleh proses terpisah karena paket menghentikan DropBridge yang sedang jalan.
+- **Pengaman**: tanpa `.sha256` tidak dipasang otomatis (hanya tautan ke halaman rilis); unduhan hanya dari repo ini lewat HTTPS; versi di nama file harus sama dengan versi rilis dan lebih baru; versi dari kode (`start.bat`/`start.sh`) tidak memasang sendiri.
+- **Setiap rilis** (setelah `git push`): `build_semua.bat` lalu `rilis_github.bat` di Windows; `bash build_deb.sh` lalu `bash rilis_github.sh` di Linux Mint. Urutannya bebas, rilis dibuat dari yang pertama mengunggah. Perlu sekali: GitHub CLI (`gh auth login`). Catatan rilis (butir `- ...`) di `Rilis\catatan-<versi>.md` tampil di kartu pembaruan.
+- Versi pertama yang punya fitur ini (3.3.2) harus dipasang manual sekali; pembaruan berikutnya bisa dari aplikasi.
 
 ## Antrean per folder, nama file, folder bawaan (PC 3.3.1 · Android 3.3.1)
 
@@ -249,6 +260,7 @@ kamu setujui (Device ID), jadi orang yang tahu PIN DropBridge tidak bisa ikut si
 | `lan_only` | `true` = tolak koneksi dari luar jaringan lokal |
 | `enable_docs` | `true` = buka dokumentasi API di `/docs` |
 | `approve_new` | `true` = HP baru harus diizinkan dari laptop walau PIN-nya benar (bawaan). Bisa diubah di Pengaturan |
+| `update_check` | `true` (bawaan) = cek pembaruan ke GitHub di latar belakang; `false` = hanya saat menekan Cek sekarang |
 
 Ubah lalu jalankan ulang DropBridge (tray > Berhenti, lalu buka lagi).
 

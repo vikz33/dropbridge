@@ -11,7 +11,7 @@ from . import auth, discovery
 from .config import os_label, settings
 from .version import VERSION
 from .netinfo import is_tailscale, lan_urls, remote_urls, tailscale_name
-from .routes import clipboard, files, folders, outbox, remote
+from .routes import clipboard, files, folders, outbox, remote, update
 from .services import thumbs
 from .services.storage import StorageError, storage
 from .routes import system
@@ -125,6 +125,8 @@ app.include_router(clipboard.router)
 app.include_router(system.router)
 app.include_router(outbox.router)
 app.include_router(remote.router)
+update.start()  # cek pembaruan berkala di latar belakang
+app.include_router(update.router)
 
 # Harus paling akhir agar tidak menimpa rute /api.
 app.mount("/", StaticFiles(directory=settings.web_dir, html=True), name="web")

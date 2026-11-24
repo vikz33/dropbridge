@@ -362,6 +362,20 @@
         <h4 class="cap">TENTANG</h4>
         <div class="card sgroup">
           <div class="srow"><span class="sic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg></span><span class="stx"><b id="verName">DropBridge PC</b><small id="verSub"></small></span><span id="verNum" class="ver code"></span></div>
+          <div class="srow" id="updRow" hidden><span class="stx"><b>Pembaruan</b><small id="updSub" class="muted"></small></span><button id="updCheck" class="btn small" type="button">Cek sekarang</button></div>
+          <div class="upd" id="updCard" hidden>
+            <div class="upd-head"><b id="updTitle"></b><span id="updMeta" class="small"></span></div>
+            <ul id="updNotes" class="upd-notes"></ul>
+            <div class="bar" id="updBar" hidden><i></i></div>
+            <p id="updMsg" class="small upd-msg" hidden></p>
+            <div class="upd-acts">
+              <button id="updGo" class="btn primary" type="button">Perbarui sekarang</button>
+              <button id="updCancel" class="btn" type="button" hidden>Batal</button>
+              <button id="updLater" class="btn ghost" type="button">Nanti</button>
+              <a id="updPage" class="linkbtn" target="_blank" rel="noopener" href="https://github.com/vikz33/dropbridge/releases" hidden>Buka halaman GitHub</a>
+            </div>
+            <p id="updFoot" class="small upd-foot">PIN, folder penyimpanan, dan HP yang sudah terhubung tidak berubah. DropBridge menutup sebentar lalu terbuka lagi sendiri.</p>
+          </div>
           <div class="srow" id="dataRow" hidden><span class="stx"><b>Folder data &amp; log</b><small>Untuk dikirim bila ada masalah</small></span><button id="dataBtn" class="btn small" type="button">Buka</button></div>
         </div>
       </section>

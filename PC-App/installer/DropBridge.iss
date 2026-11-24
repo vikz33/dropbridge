@@ -53,6 +53,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""DropBridge"""; Flags: runhidden; Tasks: firewall
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""DropBridge"" dir=in action=allow program=""{app}\DropBridge.exe"" enable=yes profile=private,public"; Flags: runhidden; Tasks: firewall
 Filename: "{app}\DropBridge.exe"; Description: "Jalankan DropBridge sekarang"; Flags: nowait postinstall skipifsilent runasoriginaluser
+; Pembaruan dari dalam aplikasi (pemasangan senyap): buka DropBridge lagi sendiri
+Filename: "{app}\DropBridge.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im DropBridge.exe"; Flags: runhidden; RunOnceId: "StopApp"

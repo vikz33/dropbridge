@@ -76,6 +76,7 @@ DEFAULTS = {
     "notify": True,  # notifikasi saat file masuk (versi desktop)
     "approve_new": True,  # HP baru harus diizinkan dari PC ini walau PIN-nya benar
     "welcomed": "",  # versi terakhir yang sudah melihat halaman Selamat datang
+    "update_check": True,  # cek pembaruan ke GitHub di latar belakang (false = hanya bila diminta)
 }
 
 
@@ -112,6 +113,7 @@ class Settings:
         self.enable_docs: bool = bool(cfg["enable_docs"])
         self.notify: bool = bool(cfg["notify"])
         self.approve_new: bool = bool(cfg["approve_new"])
+        self.update_check: bool = bool(cfg["update_check"])
         # Kode tetap PC ini: aplikasi Android mengenali PC yang sama walau alamat IP-nya berubah
         self.pc_id: str = str(raw.get("pc_id") or "")
         if not self.pc_id:
