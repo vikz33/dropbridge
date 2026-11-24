@@ -1,6 +1,6 @@
 # DropBridge — Panduan untuk Tim
 
-> Versi yang dibahas: **PC 3.3.2 · Android 3.3.2** (24 November 2026).
+> Versi yang dibahas: **PC 3.3.3 · Android 3.3.3** (24 November 2026).
 > Repo: `github.com/vikz33/dropbridge` · lokasi kerja pemilik: `C:\Dev\DropBridge`.
 > Catatan: 3.3.1 baru ditulis dan **belum diuji di HP sungguhan**. Versi 3.3.0 dan sebelumnya sudah dipakai harian.
 
@@ -84,7 +84,7 @@ Auth: token Bearer setelah PIN. Aturan nama: karakter terlarang Windows (`/ \ : 
 
 ## 8. Peta jalan dan hal yang belum selesai
 
-- **Berikutnya**: Jeda/Lanjut + Cari jalur terbaik + kirim langsung saat jaringan lokal terdeteksi (ilustrasi sudah ada, menunggu persetujuan).
+- **3.3.3 (selesai)**: Jeda/Lanjut, Cari jalur terbaik, lokal didahulukan dari Tailscale. Kode: `Net.ensureServer`, `Uploader.pause/resume/bestRoute`, `QueueControl.kt` (tombol notifikasi, `NetWatch`).
 - **3.4.0**: HP↔HP lewat aplikasi (sambung sekali dengan kode, antrean ke HP, opsi "Selalu menyala").
 - Fitur "Keluarkan tamu" di Host HP.
 - Usulan yang belum diputuskan: HTTPS, tombol "Salin info masalah", mengarahkan lokasi simpan ke OneDrive kantor.

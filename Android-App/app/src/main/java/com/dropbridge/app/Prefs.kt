@@ -102,6 +102,11 @@ object Prefs {
         get() = sp?.getBoolean("autoSend", true) ?: true
         set(v) { sp?.edit()?.putBoolean("autoSend", v)?.apply() }
 
+    /** Pengiriman dijeda pengguna: tidak ada yang mengirim sendiri sampai Lanjut. Antrean tetap utuh. */
+    var paused: Boolean
+        get() = sp?.getBoolean("paused", false) ?: false
+        set(v) { sp?.edit()?.putBoolean("paused", v)?.apply() }
+
     /** PC yang sedang dipakai: kode tetap dan sistemnya (Windows/Linux), dari /api/info. */
     var pcId: String
         get() = get("pcId")

@@ -26,6 +26,8 @@ class QueueActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var emptyView: TextView
     private lateinit var clearBtn: View
+    private lateinit var pauseBtn: android.widget.Button
+    private lateinit var routeBtn: android.widget.Button
     private var shown = "-"
     private lateinit var countView: TextView
     private lateinit var toggleAll: TextView
@@ -55,8 +57,24 @@ class QueueActivity : Activity() {
         statusView = Ui.text(c, "", 14f, false, Ui.INK)
         top.addView(statusView)
         top.addView(Ui.button(c, "Kirim sekarang", Ui.Kind.PRIMARY, 48) {
-            if (Queue.all().isEmpty()) Status.line = "Antrean kosong." else UploadService.start(this)
+            if (Queue.all().isEmpty()) Status.line = "Antrean kosong."
+            else if (Prefs.paused) Uploader.resume(this)
+            else UploadService.start(this)
+            refresh()
         }, Ui.lp(c, t = 12))
+        val ctl = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        pauseBtn = Ui.button(c, "Jeda", Ui.Kind.OUTLINE, 44) {
+            if (Prefs.paused) Uploader.resume(this) else Uploader.pause(this)
+            refresh()
+        }
+        routeBtn = Ui.button(c, "Cari jalur terbaik", Ui.Kind.OUTLINE, 44) {
+            Uploader.bestRoute(this)
+            Toast.makeText(this, "Mencari jalur terbaik. Antrean tidak berubah.", Toast.LENGTH_SHORT).show()
+            refresh()
+        }
+        ctl.addView(pauseBtn, Ui.lp(c, 0, Ui.WRAP, r = 6, weight = 1f))
+        ctl.addView(routeBtn, Ui.lp(c, 0, Ui.WRAP, l = 6, weight = 1f))
+        top.addView(ctl, Ui.lp(c, t = 8))
         col.addView(top, Ui.lp(c))
 
         heads = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -186,9 +204,19 @@ class QueueActivity : Activity() {
         val groups = Queue.groups()
         val cur = Uploader.currentId
         val total = groups.sumOf { it.second.size }
+        pauseBtn.text = if (Prefs.paused) "Lanjut" else "Jeda"
+        val ctlOn = total > 0
+        pauseBtn.visibility = if (ctlOn) View.VISIBLE else View.GONE
+        routeBtn.visibility = if (ctlOn) View.VISIBLE else View.GONE
+        val route = when {
+            Net.current.isEmpty() -> ""
+            Net.viaRemote -> "\nJalur: Tailscale (lewat internet, bisa lebih lambat)"
+            else -> "\nJalur: jaringan lokal"
+        }
         statusView.text = when {
             total == 0 -> "Tidak ada file yang menunggu."
-            UploadService.running || cur.isNotEmpty() -> "$total file di antrean · ${Status.line}"
+            Prefs.paused -> "Dijeda. $total file menunggu. Ketuk Lanjut untuk mengirim.$route"
+            UploadService.running || cur.isNotEmpty() -> "$total file di antrean · ${Status.line}$route"
             Prefs.autoSend -> "$total file menunggu PC. Terkirim sendiri begitu PC terjangkau."
             else -> "$total file menunggu PC. Ketuk Kirim sekarang saat PC terjangkau."
         }

@@ -26,6 +26,8 @@ class UploadService : Service() {
         val running: Boolean get() = Uploader.isBusy
 
         fun start(ctx: Context) {
+            Prefs.init(ctx.applicationContext)
+            if (Prefs.paused) { Status.line = "Dijeda. Ketuk Lanjut untuk mengirim."; return }
             val i = Intent(ctx, UploadService::class.java)
             if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
         }
@@ -59,7 +61,8 @@ class UploadService : Service() {
                 stopSelf()
             }
             if (Xfer.doneCount > 0) Notify.done(app, Xfer.summary.removePrefix("Terakhir: "))
-            if (!empty) AutoSend.schedule(app)
+            if (Prefs.paused) Notify.paused(app, Queue.all().size)
+            else if (!empty) AutoSend.schedule(app)
         }.start()
         return START_NOT_STICKY
     }
@@ -81,6 +84,7 @@ class UploadService : Service() {
             .setOngoing(true)
         if (text.contains('\n')) b.setSubText(text.substringBefore('\n'))
         if (pct >= 0) b.setProgress(100, pct, false)
+        Notify.actions(this, b, false)
         return b.build()
     }
 

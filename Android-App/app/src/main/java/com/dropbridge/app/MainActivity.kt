@@ -697,11 +697,13 @@ class MainActivity : Activity() {
         if (Ui.themeStale(this, builtDark)) { recreate(); return }
         shownTools = ""
         Beat.kick()
+        NetWatch.start(this)
         handler.post(ticker)
     }
 
     override fun onPause() {
         super.onPause()
+        NetWatch.stop(this)
         handler.removeCallbacks(ticker)
     }
 }

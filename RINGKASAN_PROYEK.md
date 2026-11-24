@@ -206,6 +206,12 @@ Catatan: fitur Android 3.2.0–3.3.0 baru **lolos kompilasi**, belum terbukti di
 - Belum teruji di perangkat sungguhan (hanya diuji dengan server GitHub tiruan): pemasangan senyap Inno Setup (UAC, buka ulang, pilihan tugas autostart/firewall tetap seperti sebelumnya?) dan `pkexec`+`apt` di Mint. Uji sungguhan butuh rilis versi lebih tinggi dari yang terpasang.
 - Ilustrasi: kanvas Design "DropBridge 3.3.2 · Jeda dan jalur kirim" (papan "Laptop · ada versi baru" dan "proses memperbarui").
 
+## 9c. Jalur kirim dan Jeda (PC 3.3.3 · Android 3.3.3)
+
+- Penyebab lambat: urutan jalur lama memakai Tailscale sebelum mencari PC di jaringan lokal, dan tiap file memakai 4 permintaan. Sekarang `Net.ensureServer` mendahulukan lokal, hasilnya di-cache ±20 detik, token dicek tiap 60 detik, file kecil tanpa tanya posisi.
+- `Prefs.paused` = Jeda dari pengguna, dihormati AutoSend, UploadService, dan NetWatch. `Uploader.reroute` memutus file yang sedang jalan lalu memilih jalur ulang.
+- Belum dikompilasi/diuji di HP sungguhan (sandbox tanpa Kotlin): jalankan `Android-App\build_apk.bat` dan coba: kirim lewat Tailscale lalu nyalakan Wi-Fi, tombol Jeda/Lanjut di notifikasi, hotspot menyala.
+
 ## 10. Bug yang pernah terjadi (agar tidak terulang)
 - Kelas CSS `.lg` dipakai dua kali (legenda vs tombol besar) → "Pilih file" di HP rusak. Legenda kini `.lgd`.
 - Toast/menu di dalam `<dialog>` tertutup lapisan atas → dipindah ke dialog yang terbuka.

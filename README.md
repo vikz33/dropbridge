@@ -51,6 +51,13 @@ yang sudah terhubung tidak berbeda.
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
 
+## Jalur kirim, Jeda dan Lanjut (PC 3.3.3 · Android 3.3.3)
+
+- **Jaringan lokal didahulukan**: HP memakai alamat Wi-Fi/hotspot lebih dulu; Tailscale hanya cadangan. Saat pengiriman lewat Tailscale lalu HP masuk Wi-Fi atau hotspot menyala, pengiriman pindah ke jalur lokal sendiri (file yang sedang jalan dilanjutkan dari byte terakhir). Selama aplikasi terbuka, pindahnya langsung; di latar belakang lewat kirim otomatis.
+- **Jeda / Lanjut**: di layar Antrean dan di notifikasi. Jeda menghentikan pengiriman tanpa mengubah antrean dan tidak ada yang mengirim sendiri sampai Lanjut.
+- **Cari jalur terbaik**: di layar Antrean dan notifikasi; memilih jalur ulang tanpa menyentuh antrean. Layar Antrean menampilkan jalur yang dipakai.
+- **Banyak file kecil lebih cepat**: pemeriksaan sesi dan alamat PC tidak diulang tiap file (dicek ulang tiap ±20 detik), file di bawah 5 MB langsung dikirim tanpa tanya posisi dulu: dari 4 permintaan per file jadi 1.
+
 ## Pembaruan dari GitHub (PC 3.3.2 · Android 3.3.2)
 
 - **Pengecekan**: DropBridge di laptop (Windows `.exe` dan Linux `.deb`) mengecek rilis terbaru di GitHub Releases sekitar 30 detik setelah jalan, lalu tiap 12 jam. Tanpa internet: dilewati tanpa pesan. Matikan dengan `"update_check": false` di `config.json`; tombol **Cek sekarang** tetap bisa dipakai.

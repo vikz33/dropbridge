@@ -242,7 +242,30 @@ object Net {
     private fun use(base: String): String {
         current = base
         viaRemote = isRemote(base)
+        lastOk = System.currentTimeMillis()
         return base
+    }
+
+    // Jalur: jaringan lokal didahulukan; Tailscale hanya bila lokal tidak ada. Hasil dicek ulang tiap ±20 detik,
+    // bukan tiap file, supaya banyak file kecil tidak menunggu pemeriksaan berulang.
+    @Volatile private var lastOk = 0L
+    @Volatile private var lastLocalTry = 0L
+    @Volatile private var savedFailAt = 0L
+    @Volatile private var forceFind = false
+
+    /** HP sedang di Wi-Fi, hotspot, atau kabel (bukan hanya data seluler/VPN). */
+    fun hasLocalNet(): Boolean = locals().isNotEmpty()
+
+    /** PC yang dipilih di jaringan lokal sekarang (siaran UDP), atau null. */
+    fun localMine(): String? = if (hasLocalNet()) udpDiscover() else null
+
+    /** Jalur yang dipakai gagal: periksa ulang pada pengiriman berikutnya. */
+    fun markBad() { lastOk = 0L }
+
+    /** Lupakan pilihan jalur dan cari yang terbaik dari awal (tombol "Cari jalur terbaik"). */
+    fun forgetRoute() {
+        lastOk = 0L; savedFailAt = 0L; lastLocalTry = 0L
+        forceFind = true
     }
 
     /**
@@ -251,18 +274,36 @@ object Net {
      */
     @Synchronized
     fun ensureServer(): String? {
-        val saved = Prefs.server
-        if (saved.isNotEmpty() && probe(saved, 1500)) return use(saved)
-        val remote = Prefs.remoteServer
-        if (remote.isNotEmpty() && remote != saved && probe(remote, 4000)) return use(remote)
-        val found = discover()
-        if (found == null) {
-            current = ""
-            viaRemote = false
-            return null
+        val now = System.currentTimeMillis()
+        val cur = current
+        // Jalur yang baru terbukti jalan dipakai langsung. Lewat Tailscale sementara ada jaringan lokal: lokal dicoba tiap ±15 detik.
+        if (cur.isNotEmpty() && !forceFind && now - lastOk < 20_000 &&
+            (!viaRemote || !hasLocalNet() || now - lastLocalTry < 15_000)) return cur
+        val force = forceFind
+        try {
+            val saved = Prefs.server
+            if (saved.isNotEmpty() && (force || now - savedFailAt > 20_000)) {
+                if (probe(saved, 1500)) return use(saved)
+                savedFailAt = now
+            }
+            if (hasLocalNet() && (force || cur.isEmpty() || now - lastLocalTry > 15_000)) {
+                lastLocalTry = now
+                val f = if (force) discover() else udpDiscover()
+                if (f != null) { Prefs.server = f; return use(f) }
+            }
+            val remote = Prefs.remoteServer
+            if (remote.isNotEmpty() && remote != saved && probe(remote, 4000)) return use(remote)
+            val found = discover()
+            if (found == null) {
+                current = ""
+                viaRemote = false
+                return null
+            }
+            Prefs.server = found
+            return use(found)
+        } finally {
+            forceFind = false
         }
-        Prefs.server = found
-        return use(found)
     }
 
     /** Simpan alamat Tailscale PC (dari /api/info) supaya bisa dipakai saat di luar jaringan. */
@@ -274,13 +315,18 @@ object Net {
     // ---------- Login dan data ----------
 
     /** Token yang sah. Memakai token tersimpan; jika kedaluwarsa, login ulang dengan PIN tersimpan. */
+    @Volatile private var tokenBase = ""
+    @Volatile private var tokenAt = 0L
+
     @Synchronized
     fun ensureToken(base: String, force: Boolean = false): String {
         if (!force) {
             val t = Prefs.token
             if (t.isNotEmpty()) {
+                if (base == tokenBase && System.currentTimeMillis() - tokenAt < 60_000) return t
                 val r = request("GET", "$base/api/session", t, null, 4000)
                 if (r.first == 200) {
+                    tokenBase = base; tokenAt = System.currentTimeMillis()
                     val j = try { JSONObject(r.second) } catch (e: Exception) { JSONObject() }
                     Prefs.role = j.optString("role", "full")
                     if (j.optBoolean("pending")) throw NetError(403, PENDING)
@@ -401,6 +447,9 @@ object Net {
 
     class UploadResult(val folder: String, val name: String, val duplicate: Boolean)
 
+    private const val SMALL = 5L * 1024 * 1024
+    private val tried: MutableSet<String> = Collections.synchronizedSet(HashSet())
+
     /** Berapa byte file ini yang sudah sampai di PC (kiriman sebelumnya yang putus). */
     private fun uploadOffset(base: String, token: String, item: Item): Long = try {
         val r = request("GET", "$base/api/files/upload-offset?folder=${enc(item.folder)}&uid=${enc(item.id)}", token, null, 6000)
@@ -414,8 +463,9 @@ object Net {
     fun upload(base: String, token: String, item: Item, onProgress: (Long) -> Unit): UploadResult {
         val f = File(item.path)
         val total = f.length()
-        var offset = uploadOffset(base, token, item)
+        var offset = if (total <= SMALL && item.id !in tried) 0L else uploadOffset(base, token, item)
         if (offset < 0 || offset > total) offset = 0
+        tried.add(item.id)
         var tries = 0
         while (true) {
             tries++

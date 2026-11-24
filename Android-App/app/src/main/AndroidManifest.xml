@@ -87,6 +87,11 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Tombol Jeda / Lanjut / Cari jalur terbaik di notifikasi -->
+        <receiver
+            android:name=".QueueActionReceiver"
+            android:exported="false" />
+
         <service
             android:name=".AutoSendJob"
             android:exported="false"
