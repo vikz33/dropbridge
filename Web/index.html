@@ -170,20 +170,32 @@
     <main id="pageModeHome" class="page modehome" hidden>
       <div>
         <h2>Pilih cara laptop ini dipakai</h2>
-        <p class="muted">Mode: Host. Berganti mode tidak menghapus antrean, PIN, atau daftar perangkat.</p>
+        <p id="modeNow" class="muted">Mode: Host. Berganti mode tidak menghapus antrean, PIN, atau daftar perangkat.</p>
       </div>
       <div class="mode-opts">
-        <section class="card mode-opt on">
-          <b>Laptop utama (host) <span class="tag">Sedang dipakai</span></b>
-          <p class="muted">Menerima file dari HP dan laptop lain. Punya PIN, folder penyimpanan, dan daftar perangkat yang boleh masuk. Seperti sekarang, tidak ada yang berubah.</p>
-          <a class="btn primary" href="#/ekosistem">Buka Ekosistem</a>
+        <section id="modeHostCard" class="card mode-opt on">
+          <b>Laptop utama (host) <span id="hostTag" class="tag">Sedang dipakai</span></b>
+          <p class="muted">Menerima file dari HP dan laptop lain. Punya PIN, folder penyimpanan, dan daftar perangkat yang boleh masuk.</p>
+          <a id="hostOpen" class="btn primary" href="#/ekosistem">Buka Ekosistem</a>
+          <button id="toHost" class="btn primary" type="button" hidden>Jadi host lagi</button>
         </section>
-        <section class="card mode-opt off">
-          <b>Laptop tamu <span class="tag">Segera</span></b>
-          <p class="muted">Tersambung ke laptop utama atau HP. Tanpa PIN dan port sendiri. Melihat dan mengirim sesuai izin dari host. Tersedia di versi 3.4.0.</p>
-          <button class="btn" type="button" disabled>Jadi tamu</button>
+        <section id="modeGuestCard" class="card mode-opt off">
+          <b>Laptop tamu <span id="guestTag" class="tag"></span></b>
+          <p class="muted">Tersambung ke laptop utama. Tanpa PIN dan port sendiri. Melihat dan mengirim sesuai izin dari host. Selama jadi tamu, HP dan laptop yang tersambung ke sini terputus.</p>
+          <button id="toGuest" class="btn" type="button">Jadi tamu</button>
         </section>
       </div>
+      <section id="guestPanel" class="card guest-panel" hidden>
+        <h2>Host tersambung</h2>
+        <div id="gHosts" class="g-list"></div>
+        <h2>Sambung ke host</h2>
+        <p class="muted small">Di laptop host, buka tab Ekosistem lalu baca <b>Kode tamu baru</b>. Kode berlaku 10 menit dan sekali pakai.</p>
+        <div id="gFound" class="g-list"></div>
+        <label class="g-field">Alamat host<input id="gUrl" type="text" inputmode="url" placeholder="192.168.1.12:8000" autocomplete="off"></label>
+        <label class="g-field">Kode tamu<input id="gCode" class="code" type="text" inputmode="numeric" maxlength="7" placeholder="000 000" autocomplete="off"></label>
+        <button id="gPair" class="btn primary" type="button">Sambungkan</button>
+        <p id="gErr" class="g-err small" hidden></p>
+      </section>
     </main>
 
     <main id="pageWelcome" class="page welcome" hidden>
@@ -256,6 +268,7 @@
               <p id="qrOff" class="muted" hidden>Alamat laptop belum terdeteksi.</p>
               <div class="pin-row" id="pinRow" hidden>
                 <div class="pin-box"><span class="cap">PIN LAPTOP INI</span><b id="pinHub" class="code"></b><small class="muted">Untuk HP masuk</small></div>
+                <div class="pin-box"><span class="cap">KODE TAMU BARU</span><b id="guestCode" class="code">···</b><small class="muted"><span id="guestLeft">Untuk laptop tamu</span> · <button id="guestNew" class="linkbtn" type="button">Kode baru</button></small></div>
               </div>
             </div>
           </section>
@@ -348,6 +361,13 @@
 
   <dialog id="planetDlg" class="sheet planet-dlg" aria-label="Detail perangkat">
     <div class="dlg-body"><div class="sheet-head"><h3 id="planetTitle">Perangkat</h3><button id="planetClose" class="linkbtn" type="button">Tutup</button></div><div id="planetBody"></div></div>
+  </dialog>
+
+  <dialog id="gView" class="sheet planet-dlg" aria-labelledby="gViewTitle">
+    <div class="dlg-body"><div class="sheet-head"><h3 id="gViewTitle">Isi host</h3><button id="gViewClose" class="linkbtn" type="button">Tutup</button></div>
+      <p id="gViewMsg" class="muted small" hidden></p>
+      <div id="gViewList" class="g-list"></div>
+    </div>
   </dialog>
 
   <dialog id="nameDlg" class="small-dlg">

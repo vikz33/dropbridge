@@ -20,6 +20,7 @@
 
   const JSON_HEADERS = { 'Content-Type': 'application/json' };
   const deviceKind = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ? 'hp' : 'pc';
+  let appMode = 'host'; // peran laptop ini: host atau tamu
   let isOnPc = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
   const enc = encodeURIComponent;
 
@@ -458,6 +459,7 @@
     $('#pageFolders').hidden = page !== 'folders';
     $('#pageMore').hidden = page !== 'more';
     $('#pageModeHome').hidden = page !== 'modehome';
+    if (page === 'modehome' && appMode === 'guest') loadGuest();
     for (const a of $$('.mainnav a')) {
       if (a.dataset.nav === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     }
@@ -1994,7 +1996,7 @@
       applyRole(s.role);
       if (s.pin) { $('#pinNow').textContent = s.pin.replace(/^(\d{3})(\d{3})$/, '$1 $2'); $('#pinHub').textContent = $('#pinNow').textContent; }
       $('#pinRow').hidden = !(myLocal && s.pin);
-      if (myLocal) startPendingWatch();
+      if (myLocal) { startPendingWatch(); loadMode(); }
       renderSettings();
       $('#devOthers').hidden = !myLocal;
       if (myLocal) api('/api/devices/pending').then((d) => { $('#approveChk').checked = !!d.approve_new; }).catch(() => {});
@@ -2043,7 +2045,16 @@
     } catch { /* abaikan */ }
   }
 
-  const roleName = (r) => (r === 'full' ? 'Penuh' : 'Hanya kirim');
+  const ROLE_NAMES = { full: 'Penuh', get: 'Lihat dan unduh', view: 'Lihat', send: 'Hanya kirim' };
+  const roleName = (r) => ROLE_NAMES[r] || 'Hanya kirim';
+  const GUEST_ROLES = ['send', 'view', 'get'];
+  async function setRole(v, to, done) {
+    try { await api('/api/devices/' + v.id + '/role', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ role: to }) }); toast('Hak diubah: ' + roleName(to)); done(); }
+    catch (err) { toast(err.message, 'err'); }
+  }
+  // Laptop tamu: tiga tingkat hak dalam satu pilihan
+  const rolePicker = (v, done) => el('div', { class: 'seg seg-text role-pick', role: 'group', 'aria-label': 'Hak laptop tamu' },
+    ...GUEST_ROLES.map((r) => el('button', { type: 'button', text: roleName(r), 'aria-pressed': String(v.role === r), onclick: () => { if (v.role !== r) setRole(v, r, done); } })));
 
   async function renderDevices() {
     const box = $('#devList');
@@ -2064,10 +2075,10 @@
               class: 'role-chip ' + v.role, type: 'button', text: roleName(v.role),
               title: 'Ketuk untuk mengubah hak', 'aria-label': 'Hak: ' + roleName(v.role) + '. Ketuk untuk mengubah.',
               onclick: async () => {
+                if (v.guest) { setRole(v, GUEST_ROLES[(GUEST_ROLES.indexOf(v.role) + 1) % 3], renderDevices); return; }
                 const to = v.role === 'full' ? 'send' : 'full';
                 if (!confirm(`Ubah hak ${v.name} menjadi "${roleName(to)}"?`)) return;
-                try { await api('/api/devices/' + v.id + '/role', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ role: to }) }); toast('Hak diubah: ' + roleName(to)); renderDevices(); }
-                catch (err) { toast(err.message, 'err'); }
+                setRole(v, to, renderDevices);
               },
             })
             : el('span', { class: 'role-chip ' + v.role, text: roleName(v.role) });
@@ -2150,6 +2161,7 @@
       hubPeers.length ? `${hubPeers.length} laptop lain di Wi-Fi ini` : '',
     ].filter(Boolean).join(' · ');
     renderPendingCards();
+    if (myLocal && !guestUntil) loadGuestCode(false);
     if (hubSel && !planets.some((p) => p.id === hubSel) && hubSel !== 'sun') { hubSel = ''; }
     renderDetail(planets);
     const box = $('#hubMap');
@@ -2243,6 +2255,109 @@
   }
   for (const b of $$('.add-tabs button')) b.addEventListener('click', () => setAddTab(b.dataset.tab));
 
+  // ---------- Mode laptop: host atau tamu ----------
+  async function loadMode() {
+    if (!myLocal) return;
+    try { appMode = (await api('/api/mode')).mode; } catch { /* tetap host */ }
+    renderMode();
+  }
+  function renderMode() {
+    const g = appMode === 'guest';
+    document.body.classList.toggle('guest-mode', g);
+    $('#modeBtn').firstChild.textContent = 'Mode: ' + (g ? 'Tamu' : 'Host') + ' ';
+    $('#modeNow').textContent = g ? 'Mode: Tamu. Server di laptop ini mati, jadi HP dan laptop lain tidak bisa masuk.' : 'Mode: Host. Berganti mode tidak menghapus antrean, PIN, atau daftar perangkat.';
+    $('#modeHostCard').classList.toggle('on', !g); $('#modeHostCard').classList.toggle('off', g);
+    $('#modeGuestCard').classList.toggle('on', g); $('#modeGuestCard').classList.toggle('off', !g);
+    $('#hostTag').textContent = g ? '' : 'Sedang dipakai';
+    $('#guestTag').textContent = g ? 'Sedang dipakai' : '';
+    $('#hostOpen').hidden = g; $('#toHost').hidden = !g;
+    $('#toGuest').hidden = g;
+    $('#guestPanel').hidden = !g;
+    if (g && route.type === 'modehome') loadGuest();
+  }
+  async function switchMode(to) {
+    if (to === 'guest' && !confirm('Jadi tamu? HP dan laptop yang tersambung ke laptop ini akan terputus sampai kamu kembali jadi host.')) return;
+    try { await api('/api/mode', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ mode: to }) }); appMode = to; renderMode(); toast(to === 'guest' ? 'Sekarang jadi tamu' : 'Kembali jadi host'); }
+    catch (err) { toast(err.message, 'err'); }
+  }
+  $('#toGuest').addEventListener('click', () => switchMode('guest'));
+  $('#toHost').addEventListener('click', () => switchMode('host'));
+
+  let gPeers = [];
+  async function loadGuest() {
+    try { gPeers = (await api('/api/remote/peers?fresh=1')).peers || []; } catch { gPeers = []; }
+    const mine = gPeers.filter((p) => p.paired && p.guest);
+    $('#gHosts').replaceChildren(...(mine.length ? mine.map((p) => el('div', { class: 'g-row' },
+      el('span', { class: 'hd-tx' }, el('b', { text: p.name || p.url }), el('small', { class: 'muted', text: (p.here ? 'terlihat di Wi-Fi ini' : 'belum terlihat') + ' · ' + (p.os || 'Laptop') })),
+      el('span', { class: 'role-chip ' + (p.role || 'send'), text: roleName(p.role || 'send') }),
+      el('button', { class: 'btn small', type: 'button', text: 'Lihat isi', onclick: () => openGuestView(p) }),
+      el('button', { class: 'btn small primary', type: 'button', text: 'Kirim ke sini', onclick: () => { setTgt({ t: 'peer', id: p.id, name: p.name, os: p.os || '' }); location.hash = '#/'; toast('Tujuan: ' + p.name); } }),
+      el('button', { class: 'btn small danger', type: 'button', text: 'Lepas', onclick: async () => {
+        if (!confirm(`Lepas ${p.name}? Untuk tersambung lagi perlu kode tamu baru dari host.`)) return;
+        try { await api('/api/remote/peers/' + encodeURIComponent(p.id), { method: 'DELETE' }); loadGuest(); } catch (err) { toast(err.message, 'err'); } },
+      }))) : [el('p', { class: 'muted small', text: 'Belum ada host. Sambungkan di bawah.' })]));
+    const found = gPeers.filter((p) => p.here && !(p.paired && p.guest));
+    $('#gFound').replaceChildren(...found.map((p) => el('button', { class: 'btn ghost g-found', type: 'button', text: `${p.name || p.url} · ${p.url.replace('http://', '')}`,
+      onclick: () => { $('#gUrl').value = p.url.replace('http://', ''); $('#gUrl').dataset.id = p.id || ''; $('#gUrl').dataset.name = p.name || ''; $('#gUrl').dataset.os = p.os || ''; $('#gCode').focus(); } })));
+  }
+  $('#gUrl').addEventListener('input', () => { delete $('#gUrl').dataset.id; });
+  $('#gPair').addEventListener('click', async () => {
+    const u = $('#gUrl'); const code = $('#gCode').value.replace(/\s/g, '');
+    const err = $('#gErr'); err.hidden = true;
+    if (!u.value.trim() || !/^\d{6}$/.test(code)) { err.textContent = 'Isi alamat host dan kode tamu 6 angka.'; err.hidden = false; return; }
+    $('#gPair').disabled = true;
+    try {
+      const r = await api('/api/remote/pair', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ id: u.dataset.id || '', url: u.value.trim(), code, name: u.dataset.name || '', os: u.dataset.os || '' }) });
+      $('#gCode').value = ''; toast('Tersambung sebagai tamu (' + roleName(r.role) + ')'); loadGuest();
+    } catch (e) { err.textContent = e.message; err.hidden = false; }
+    $('#gPair').disabled = false;
+  });
+  let gv = { id: '', folder: '' };
+  async function openGuestView(p, folder = '') {
+    gv = { id: p.id, folder, name: p.name };
+    $('#gViewTitle').textContent = 'Isi ' + (p.name || 'host') + (folder ? ' · ' + folder : '');
+    const msg = $('#gViewMsg'); msg.hidden = true;
+    const list = $('#gViewList'); list.replaceChildren();
+    if (!$('#gView').open) $('#gView').showModal();
+    try {
+      const rows = [];
+      if (folder) rows.push(el('button', { class: 'btn ghost g-found', type: 'button', text: '← Kembali', onclick: () => openGuestView(p, folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : '') }));
+      const fs = await api('/api/remote/files?id=' + encodeURIComponent(p.id) + '&folder=' + encodeURIComponent(folder));
+      if (!folder) {
+        const fd = await api('/api/remote/folders?id=' + encodeURIComponent(p.id));
+        for (const f of (fd.folders || []).filter((x) => !String(x.name).includes('/'))) rows.push(el('button', { class: 'btn ghost g-found', type: 'button', text: '📁 ' + (f.label || f.name), onclick: () => openGuestView(p, f.name) }));
+      }
+      for (const f of fs.files || []) {
+        rows.push(el('div', { class: 'g-row' }, el('span', { class: 'hd-tx' }, el('b', { text: f.name }), el('small', { class: 'muted', text: fmtSize(f.size) })),
+          el('a', { class: 'btn small', href: '/api/remote/download?id=' + encodeURIComponent(p.id) + '&folder=' + encodeURIComponent(folder) + '&name=' + encodeURIComponent(f.name), text: 'Unduh', download: f.name })));
+      }
+      if (rows.length === (folder ? 1 : 0)) { msg.textContent = 'Folder ini kosong.'; msg.hidden = false; }
+      list.replaceChildren(...rows);
+    } catch (e) { msg.textContent = e.message; msg.hidden = false; }
+  }
+  $('#gViewClose').addEventListener('click', () => $('#gView').close());
+
+  let guestUntil = 0;
+  let guestBusy = false;
+  async function loadGuestCode(fresh) {
+    if (!myLocal || guestBusy || appMode === 'guest') return;
+    guestBusy = true;
+    try {
+      const d = await api('/api/guest/code' + (fresh ? '?new=1' : ''));
+      guestUntil = Date.now() + d.left * 1000;
+      $('#guestCode').textContent = d.code.replace(/^(\d{3})(\d{3})$/, '$1 $2');
+      tickGuest();
+    } catch { /* abaikan */ }
+    guestBusy = false;
+  }
+  function tickGuest() {
+    const n = Math.max(0, Math.round((guestUntil - Date.now()) / 1000));
+    $('#guestLeft').textContent = n ? 'Berlaku ' + mmss(n) : 'Habis';
+    if (!n && guestUntil && route.type === 'more') { guestUntil = 0; loadGuestCode(true); }
+  }
+  setInterval(() => { if (guestUntil && route.type === 'more') tickGuest(); }, 1000);
+  $('#guestNew').addEventListener('click', () => loadGuestCode(true));
+
   async function changeRole(v) {
     const to = v.role === 'full' ? 'send' : 'full';
     if (!confirm(`Ubah hak ${v.name} menjadi "${roleName(to)}"?`)) return;
@@ -2278,8 +2393,9 @@
         el('button', { class: 'btn', type: 'button', text: 'Tolak', onclick: () => answer(v, false) }),
         el('button', { class: 'btn primary', type: 'button', text: 'Izinkan…', onclick: () => { if ($('#planetDlg').open) $('#planetDlg').close(); openApprove(v); } })));
     } else if (myLocal) {
-      nodes.push(el('div', { class: 'hd-acts' },
-        el('button', { class: 'btn', type: 'button', text: v.role === 'full' ? 'Jadikan Hanya kirim' : 'Beri akses Penuh', onclick: () => changeRole(v) }),
+      if (v.guest) nodes.push(el('p', { class: 'muted small', text: 'Laptop tamu. Ia bisa masuk lagi sendiri sampai kamu memutuskannya.' }), rolePicker(v, loadHub));
+      nodes.push(el('div', { class: 'hd-acts' + (v.guest ? ' one' : '') },
+        v.guest ? '' : el('button', { class: 'btn', type: 'button', text: v.role === 'full' ? 'Jadikan Hanya kirim' : 'Beri akses Penuh', onclick: () => changeRole(v) }),
         el('button', { class: 'btn danger', type: 'button', text: 'Putuskan', onclick: () => disconnect(v) })));
     } else if (!v.current) {
       nodes.push(el('p', { class: 'muted small', text: 'Hak dan pemutusan perangkat diatur dari laptop.' }));
