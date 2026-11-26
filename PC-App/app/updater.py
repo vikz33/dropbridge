@@ -90,6 +90,26 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def _why(e: BaseException) -> str:
+    """Alasan singkat yang bisa ditindaklanjuti pengguna saat GitHub tidak terjangkau."""
+    import socket
+    import ssl
+    r = getattr(e, "reason", e)
+    if isinstance(r, ssl.SSLCertVerificationError) or "CERTIFICATE" in str(r).upper():
+        return "Sertifikat HTTPS ditolak: cek jam dan tanggal laptop, atau antivirus yang memeriksa HTTPS."
+    if isinstance(r, ssl.SSLError):
+        return "Sambungan aman (HTTPS) gagal: cek antivirus atau VPN."
+    if isinstance(r, socket.gaierror):
+        return "Alamat github.com tidak ditemukan: cek sambungan internet."
+    if isinstance(r, (TimeoutError, socket.timeout)):
+        return "Waktu habis: cek sambungan internet."
+    if isinstance(r, ConnectionRefusedError) or isinstance(r, ConnectionResetError):
+        return "Sambungan ditolak atau diputus: cek firewall, proxy, atau VPN."
+    if isinstance(e, ValueError):
+        return "Balasan GitHub tidak terbaca."
+    return f"({r.__class__.__name__})"
+
+
 class Updater:
     def __init__(self, current: str, data_dir: Path, repo: str = REPO, frozen: bool = False,
                  api_base: str = API_BASE, test_hosts: tuple = ()) -> None:
@@ -191,8 +211,8 @@ class Updater:
                 err = f"GitHub menjawab {e.code}."
         except UpdateError as e:
             err = str(e)
-        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
-            err = "Tidak bisa terhubung ke GitHub."
+        except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
+            err = "Tidak bisa terhubung ke GitHub. " + _why(e)
         with self.lock:
             if err:
                 self.s["state"] = prev if prev in ("available", "uptodate") else "idle"
