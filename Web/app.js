@@ -215,7 +215,7 @@
 
   function setTitle() {
     const where = isOnPc ? 'PC ini' : pcLabel();
-    const page = route.type === 'send' ? 'Kirim ke ' + where : route.type === 'more' ? 'Ekosistem' : route.type === 'welcome' ? 'Selamat datang' : 'File di ' + where;
+    const page = route.type === 'send' ? 'Kirim ke ' + where : route.type === 'more' ? 'Ekosistem' : route.type === 'modehome' ? 'Home' : route.type === 'welcome' ? 'Selamat datang' : 'File di ' + where;
     $('#pageTitle').textContent = page;
     document.title = page + ' · DropBridge';
   }
@@ -427,6 +427,7 @@
     }
     if (h === '#/folders') return { type: 'home', name: '' };
     if (h === '#/ekosistem' || h === '#/hubungkan' || h === '#/lainnya') return { type: 'more', name: '' };
+    if (h === '#/home') return { type: 'modehome', name: '' };
     if (h === '#/selamat-datang') return { type: 'welcome', name: '' };
     return { type: 'send', name: '' };
   }
@@ -440,6 +441,9 @@
       if (!$('#setDlg').open) $('#setDlg').showModal();
     }
     route = parseHash();
+    if (route.type === 'modehome' && !isOnPc) route = { type: 'send' };
+    $('#navHome').hidden = !isOnPc;
+    $('#modeBtn').hidden = !isOnPc;
     if (myRole !== 'full' && route.type !== 'send' && route.type !== 'more' && route.type !== 'welcome') {
       route = { type: 'send' };
       if (location.hash && location.hash !== '#/') history.replaceState(null, '', '#/');
@@ -447,12 +451,13 @@
     files = [];
     filesSig = '';
     const home = route.type === 'home';
-    const page = route.type === 'send' ? 'send' : route.type === 'more' ? 'more' : route.type === 'welcome' ? 'welcome' : 'folders';
+    const page = route.type === 'send' ? 'send' : route.type === 'more' ? 'more' : route.type === 'modehome' ? 'modehome' : route.type === 'welcome' ? 'welcome' : 'folders';
     $('#pageWelcome').hidden = page !== 'welcome';
     if (page === 'welcome') loadStorage();
     $('#pageSend').hidden = page !== 'send';
     $('#pageFolders').hidden = page !== 'folders';
     $('#pageMore').hidden = page !== 'more';
+    $('#pageModeHome').hidden = page !== 'modehome';
     for (const a of $$('.mainnav a')) {
       if (a.dataset.nav === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     }
@@ -1740,7 +1745,7 @@
 
   // Ikon muat ulang di kepala halaman File (berputar saat memuat) + "diperbarui 10.19"
   function renderUpdated() {
-    const files = route.type !== 'send' && route.type !== 'more' && route.type !== 'welcome';
+    const files = route.type !== 'send' && route.type !== 'more' && route.type !== 'welcome' && route.type !== 'modehome';
     $('#refreshBtn').hidden = !files;
     $('#refreshBtn').title = lastRefresh
       ? 'Muat ulang · diperbarui ' + new Date(lastRefresh).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
@@ -2224,9 +2229,6 @@
   $('#planetClose').addEventListener('click', () => $('#planetDlg').close());
   $('#planetDlg').addEventListener('click', (e) => { if (e.target.id === 'planetDlg') e.target.close(); });
   $('#planetDlg').addEventListener('close', () => { hubSel = ''; hubSig = ''; if (route.type === 'more') renderHub(); });
-  $('#modeBtn').addEventListener('click', () => $('#modeDlg').showModal());
-  $('#modeClose').addEventListener('click', () => $('#modeDlg').close());
-  $('#modeDlg').addEventListener('click', (e) => { if (e.target.id === 'modeDlg') e.target.close(); });
   $('#legendBtn').addEventListener('click', () => {
     const c = $('#legendCard'); c.hidden = !c.hidden;
     $('#legendBtn').setAttribute('aria-expanded', String(!c.hidden));

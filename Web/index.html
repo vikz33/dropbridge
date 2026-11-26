@@ -37,6 +37,7 @@
         <a id="devBtn" class="status" href="#/ekosistem" title="Perangkat yang terhubung"><span id="dot" class="dot"></span><span id="statusText">Menghubungkan...</span></a>
       </div>
       <nav class="mainnav" aria-label="Menu utama">
+        <a href="#/home" data-nav="modehome" id="navHome"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Home</span></a>
         <a href="#/" data-nav="send"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3L10.5 13.5"/><path d="M21 3l-6.5 18-4-7.5L3 9.5z"/></svg><span>Kirim</span></a>
         <a href="#/folders" data-nav="folders"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>File</span></a>
         <a href="#/ekosistem" data-nav="more"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-dasharray="36 6"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="17.7" cy="6.3" r="2.4" fill="currentColor" stroke="none"/></svg><span>Ekosistem</span></a>
@@ -166,6 +167,25 @@
       </div>
     </main>
 
+    <main id="pageModeHome" class="page modehome" hidden>
+      <div>
+        <h2>Pilih cara laptop ini dipakai</h2>
+        <p class="muted">Mode: Host. Berganti mode tidak menghapus antrean, PIN, atau daftar perangkat.</p>
+      </div>
+      <div class="mode-opts">
+        <section class="card mode-opt on">
+          <b>Laptop utama (host) <span class="tag">Sedang dipakai</span></b>
+          <p class="muted">Menerima file dari HP dan laptop lain. Punya PIN, folder penyimpanan, dan daftar perangkat yang boleh masuk. Seperti sekarang, tidak ada yang berubah.</p>
+          <a class="btn primary" href="#/ekosistem">Buka Ekosistem</a>
+        </section>
+        <section class="card mode-opt off">
+          <b>Laptop tamu <span class="tag">Segera</span></b>
+          <p class="muted">Tersambung ke laptop utama atau HP. Tanpa PIN dan port sendiri. Melihat dan mengirim sesuai izin dari host. Tersedia di versi 3.4.0.</p>
+          <button class="btn" type="button" disabled>Jadi tamu</button>
+        </section>
+      </div>
+    </main>
+
     <main id="pageWelcome" class="page welcome" hidden>
       <div class="wel-head">
         <div>
@@ -197,7 +217,7 @@
       <div class="hub-bar">
         <p id="hubSum" class="muted small"></p>
         <span class="hub-acts">
-          <button type="button" id="modeBtn" class="btn ghost small mode-chip" aria-haspopup="dialog">Mode: Host <span aria-hidden="true">▾</span></button>
+          <a id="modeBtn" class="btn ghost small mode-chip" href="#/home">Mode: Host <span aria-hidden="true">▾</span></a>
           <button type="button" id="legendBtn" class="btn ghost small" aria-expanded="false" aria-controls="legendCard">Arti tanda</button>
         </span>
       </div>
@@ -328,15 +348,6 @@
 
   <dialog id="planetDlg" class="sheet planet-dlg" aria-label="Detail perangkat">
     <div class="dlg-body"><div class="sheet-head"><h3 id="planetTitle">Perangkat</h3><button id="planetClose" class="linkbtn" type="button">Tutup</button></div><div id="planetBody"></div></div>
-  </dialog>
-
-  <dialog id="modeDlg" class="sheet planet-dlg" aria-label="Pilih mode laptop">
-    <div class="dlg-body"><div class="sheet-head"><h3>Mode laptop ini</h3><button id="modeClose" class="linkbtn" type="button">Tutup</button></div>
-      <div class="mode-opts">
-        <div class="mode-opt on"><b>Host <span class="tag">Aktif</span></b><small class="muted">Laptop ini jadi pusat. HP dan laptop lain mengirim ke sini.</small></div>
-        <div class="mode-opt off"><b>Tamu <span class="tag">Segera</span></b><small class="muted">Laptop ini mengintip dan mengirim ke laptop host yang memberi izin. Tersedia di versi 3.4.0.</small></div>
-      </div>
-    </div>
   </dialog>
 
   <dialog id="nameDlg" class="small-dlg">
