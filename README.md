@@ -51,6 +51,13 @@ yang sudah terhubung tidak berbeda.
   (nomor kontainer) ikut terpasang, jadi tetap jalan tanpa internet. Ubah warna: edit tokens.json, lalu
   `python design/build_tokens.py`.
 
+## Mode laptop tamu (PC 3.4.0)
+
+- Tab **Home** memilih peran laptop: **host** (seperti biasa) atau **tamu**.
+- Di laptop host, tab **Ekosistem** menampilkan **Kode tamu baru** (6 angka, sekali pakai, 10 menit). Laptop tamu memasukkan alamat host dan kode itu, lalu tersambung.
+- Hak tamu diatur host: **Hanya kirim**, **Lihat**, atau **Lihat dan unduh**. Tamu tersambung lagi sendiri sampai host menekan Putuskan.
+- Selama jadi tamu, laptop itu tidak menerima HP atau laptop lain.
+
 ## Jalur kirim, Jeda dan Lanjut (PC 3.3.3 · Android 3.3.3)
 
 - **Jaringan lokal didahulukan**: HP memakai alamat Wi-Fi/hotspot lebih dulu; Tailscale hanya cadangan. Saat pengiriman lewat Tailscale lalu HP masuk Wi-Fi atau hotspot menyala, pengiriman pindah ke jalur lokal sendiri (file yang sedang jalan dilanjutkan dari byte terakhir). Selama aplikasi terbuka, pindahnya langsung; di latar belakang lewat kirim otomatis.

@@ -1,6 +1,6 @@
 # DropBridge — Panduan untuk Tim
 
-> Versi yang dibahas: **PC 3.3.3 · Android 3.3.3** (24 November 2026).
+> Versi yang dibahas: **PC 3.4.0 · Android 3.4.0** (26 November 2026).
 > Repo: `github.com/vikz33/dropbridge` · lokasi kerja pemilik: `C:\Dev\DropBridge`.
 > Catatan: 3.3.1 baru ditulis dan **belum diuji di HP sungguhan**. Versi 3.3.0 dan sebelumnya sudah dipakai harian.
 
@@ -84,6 +84,7 @@ Auth: token Bearer setelah PIN. Aturan nama: karakter terlarang Windows (`/ \ : 
 
 ## 8. Peta jalan dan hal yang belum selesai
 
+- **3.4.0 (kode selesai, belum diuji di dua laptop)**: mode laptop tamu (laptop ↔ laptop host), tab Home, Ekosistem dirapikan. Kode: `auth.py` (kode tamu, hak view/get, resume), `routes/remote.py` (pair, files, download), `/api/mode`; uji: `python tools/test_guest.py`. Berikutnya: HP host memakai protokol yang sama, lalu laptop tamu ↔ HP host.
 - **3.3.3 (selesai)**: Jeda/Lanjut, Cari jalur terbaik, lokal didahulukan dari Tailscale. Kode: `Net.ensureServer`, `Uploader.pause/resume/bestRoute`, `QueueControl.kt` (tombol notifikasi, `NetWatch`).
 - **3.4.0**: HP↔HP lewat aplikasi (sambung sekali dengan kode, antrean ke HP, opsi "Selalu menyala").
 - Fitur "Keluarkan tamu" di Host HP.

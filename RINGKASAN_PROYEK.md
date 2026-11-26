@@ -212,6 +212,15 @@ Catatan: fitur Android 3.2.0–3.3.0 baru **lolos kompilasi**, belum terbukti di
 - `Prefs.paused` = Jeda dari pengguna, dihormati AutoSend, UploadService, dan NetWatch. `Uploader.reroute` memutus file yang sedang jalan lalu memilih jalur ulang.
 - Belum dikompilasi/diuji di HP sungguhan (sandbox tanpa Kotlin): jalankan `Android-App\build_apk.bat` dan coba: kirim lewat Tailscale lalu nyalakan Wi-Fi, tombol Jeda/Lanjut di notifikasi, hotspot menyala.
 
+## 9d. Mode laptop tamu (PC 3.4.0 · Android 3.4.0, 26 Nov 2026)
+
+- Keputusan: satu laptop = satu mode (host ATAU tamu). Tamu boleh punya beberapa host. Syncthing tetap berdampingan. HP sebagai host menunjukkan ke tamu hanya daftar bersama + folder terima (belum dikerjakan).
+- Host: `GET /api/guest/code` (kode 6 angka, sekali pakai, 10 menit, hanya dari laptop ini). Tamu: `POST /api/guest/pair` {code, device, name} → token + rahasia panjang (hash disimpan di `trusted.json`, `guest: true`); `POST /api/guest/resume` {device, secret} = masuk lagi sendiri sampai host memutus (DELETE /api/devices/{id}). Hak bertingkat: `send` < `view` < `get` < `full` (`require_view`/`require_get` di `auth.py`; id perangkat berganti saat resume, ambil ulang daftar sebelum memutus).
+- Tamu (laptop ini): `/api/remote/pair`, `/files`, `/download`; `_pcall` masuk lagi otomatis bila token basi. `POST /api/mode` {host|guest}; mode tamu = `guard` di `main.py` menolak perangkat lain (503) dan `discovery` berhenti menjawab.
+- UI: tab Home (`#/home`) memilih mode; Ekosistem: kode tamu di kartu Tambah perangkat, pilihan hak 3 tingkat di detail tamu.
+- Uji otomatis: `python tools/test_guest.py` (2 server, 26 butir, lulus). Belum diuji di dua laptop sungguhan dan belum diuji klik di tampilan.
+- Berikutnya: (2) HP host memakai protokol tamu (`HostServer.kt`), (3) laptop tamu ↔ HP host, penemuan otomatis tanpa kode untuk permintaan izin di Wi-Fi yang sama.
+
 ## 10. Bug yang pernah terjadi (agar tidak terulang)
 - Kelas CSS `.lg` dipakai dua kali (legenda vs tombol besar) → "Pilih file" di HP rusak. Legenda kini `.lgd`.
 - Toast/menu di dalam `<dialog>` tertutup lapisan atas → dipindah ke dialog yang terbuka.
