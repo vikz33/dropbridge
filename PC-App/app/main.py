@@ -53,6 +53,10 @@ async def guard(request: Request, call_next):
     if settings.lan_only and not _is_local(client):
         return JSONResponse({"detail": "Hanya bisa diakses dari jaringan lokal."}, status_code=403)
 
+    if settings.mode == "guest" and request.url.path.startswith("/api/") and not auth.is_this_pc(request) \
+            and request.url.path != "/api/info":
+        return JSONResponse({"detail": "Laptop ini sedang jadi tamu."}, status_code=503)
+
     if request.method == "POST" and request.url.path in ("/api/files/upload", "/api/files/upload-raw"):
         try:
             length = int(request.headers.get("content-length", "0"))

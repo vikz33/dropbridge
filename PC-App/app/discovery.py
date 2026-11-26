@@ -30,7 +30,7 @@ def _serve(http_port: int) -> None:
     while True:
         try:
             data, addr = sock.recvfrom(256)
-            if data.strip() == b"DROPBRIDGE?" and _is_local(addr[0]):
+            if data.strip() == b"DROPBRIDGE?" and _is_local(addr[0]) and settings.mode != "guest":
                 sock.sendto(reply, addr)
         except OSError:
             continue

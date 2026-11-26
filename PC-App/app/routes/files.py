@@ -11,7 +11,7 @@ from starlette.requests import ClientDisconnect
 from pydantic import BaseModel, Field
 
 from .. import events, inbox
-from ..auth import require_auth, require_full, sender
+from ..auth import require_auth, require_full, require_get, require_view, sender
 from ..config import settings
 from ..services import thumbs
 from ..services.storage import guess_mime, is_inline_safe, storage, trash_label
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/files", dependencies=[Depends(require_auth)])
 CHUNK = 1024 * 1024
 
 
-@router.get("", dependencies=[Depends(require_full)])
+@router.get("", dependencies=[Depends(require_view)])
 def list_files(folder: str = ""):
     return {"folder": folder, "files": storage.list_files(folder)}
 
@@ -215,7 +215,7 @@ def move(body: MoveIn):
     return {"folder": to, "name": final}
 
 
-@router.get("/{name}/thumb", dependencies=[Depends(require_full)])
+@router.get("/{name}/thumb", dependencies=[Depends(require_view)])
 def thumb(name: str, folder: str = ""):
     path = storage.path_of(folder, name)
     if not thumbs.thumbable(guess_mime(path.name)):
@@ -226,7 +226,7 @@ def thumb(name: str, folder: str = ""):
     return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
-@router.get("/{name}", dependencies=[Depends(require_full)])
+@router.get("/{name}", dependencies=[Depends(require_get)])
 def download(name: str, folder: str = "", inline: bool = False):
     path = storage.path_of(folder, name)
     mime = guess_mime(path.name)

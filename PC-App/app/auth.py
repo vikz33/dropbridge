@@ -28,7 +28,9 @@ MAX_FAILS = 5
 LOCK_SECONDS = 60
 ONLINE_SECONDS = 75  # dianggap "online" jika aktif dalam rentang ini
 PENDING_SECONDS = 120  # izin dari PC ditunggu selama ini, lalu otomatis ditolak
-ROLES = ("full", "send")
+ROLES = ("full", "get", "view", "send")  # full = semua; get = lihat + unduh; view = lihat saja; send = hanya kirim
+ROLE_RANK = {"send": 0, "view": 1, "get": 2, "full": 3}
+GUEST_CODE_SECONDS = 600  # kode tamu berlaku sekian detik dan hanya sekali pakai
 
 SAVE_EVERY = 60  # detik; waktu "aktif terakhir" disimpan paling sering sekali per menit
 
@@ -41,7 +43,7 @@ _SESS_FILE = settings.data_dir / "sessions.json"
 _lock = threading.Lock()
 _last_save = 0.0
 _KEYS = ("id", "created", "last", "expires", "name", "kind", "ip", "ua", "local")
-_EXTRA = {"status": "ok", "role": "full", "dev": ""}  # kunci baru 2.5.0; sesi lama otomatis sudah diizinkan, hak penuh
+_EXTRA = {"status": "ok", "role": "full", "dev": "", "guest": False}  # kunci baru 2.5.0; sesi lama otomatis sudah diizinkan, hak penuh
 _rejected: dict[str, float] = {}  # token yang ditolak PC -> waktu, supaya HP yang menunggu tahu hasilnya
 
 # Perangkat yang sudah diizinkan: kode perangkat -> {role, name, approved}
@@ -219,6 +221,22 @@ def require_full(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Perangkat ini hanya boleh mengirim file.")
 
 
+def _need(request: Request, rank: int, msg: str) -> None:
+    require_auth(request)
+    if ROLE_RANK.get(_current(request).get("role"), 0) < rank:
+        raise HTTPException(status_code=403, detail=msg)
+
+
+def require_view(request: Request) -> None:
+    """Melihat daftar file dan thumbnail: hak lihat, unduh, atau penuh."""
+    _need(request, 1, "Perangkat ini tidak boleh melihat isi folder.")
+
+
+def require_get(request: Request) -> None:
+    """Mengunduh file: hak unduh atau penuh."""
+    _need(request, 2, "Perangkat ini tidak boleh mengunduh.")
+
+
 def sender(request: Request) -> dict:
     """Siapa yang mengirim: nama perangkat dan jenisnya ("pc" untuk laptop ini, "hp" untuk yang lain)."""
     token = _token_from(request)
@@ -390,6 +408,7 @@ def _public(token: str, s: dict, mine: str | None, now: float) -> dict:
         "key": s.get("dev") or "",  # kunci perangkat yang tetap (untuk kotak kiriman laptop → HP)
         "tailscale": is_tailscale(s["ip"]),  # tersambung lewat internet (orbit putus-putus di peta)
         "role": s.get("role", "full"),
+        "guest": bool(s.get("guest")),  # laptop tamu yang masuk lewat kode tamu
         "pending": s.get("status") == "pending",
         "wait": max(0, int(PENDING_SECONDS - (now - s["created"]))) if s.get("status") == "pending" else 0,
     }
@@ -458,7 +477,9 @@ class RoleIn(BaseModel):
 
 def _trust(s: dict) -> None:
     if s.get("dev"):
-        _trusted[s["dev"]] = {"role": s["role"], "name": s["name"] or s["kind"], "approved": time.time()}
+        cur = _trusted.get(s["dev"], {})  # gabungkan: rahasia tamu tidak boleh hilang
+        cur.update({"role": s["role"], "name": s["name"] or s["kind"], "approved": time.time()})
+        _trusted[s["dev"]] = cur
         _save_trust()
 
 
@@ -510,6 +531,106 @@ def revoke_device(device_id: str, request: Request):
         _save_trust()
     _save()
     return {"ok": True}
+
+
+# ---------- Laptop tamu (3.4.0) ----------
+# Host membuat kode tamu 6 angka (sekali pakai). Tamu menukarnya dengan token dan satu rahasia panjang;
+# rahasia itu dipakai untuk masuk lagi sendiri sampai host memutuskan perangkatnya.
+_guest = {"code": "", "until": 0.0}
+
+
+def _guest_code(new: bool = False) -> tuple[str, int]:
+    now = time.time()
+    if new or not _guest["code"] or _guest["until"] < now:
+        _guest["code"] = f"{secrets.randbelow(10**6):06d}"
+        _guest["until"] = now + GUEST_CODE_SECONDS
+    return _guest["code"], max(0, int(_guest["until"] - now))
+
+
+def _sha(text: str) -> str:
+    import hashlib
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _guest_gate(request: Request) -> tuple[str, float]:
+    if settings.mode == "guest":
+        raise HTTPException(status_code=503, detail="Laptop ini sedang jadi tamu, tidak menerima tamu lain.")
+    ip = _client_ip(request)
+    now = time.time()
+    if _fails.get(ip, (0, 0.0))[1] > now:
+        raise HTTPException(status_code=429, detail=f"Terlalu banyak percobaan. Coba lagi {int(_fails[ip][1] - now) + 1} detik.")
+    return ip, now
+
+
+def _guest_fail(ip: str, now: float, msg: str):
+    count = _fails.get(ip, (0, 0.0))[0] + 1
+    _fails[ip] = (0, now + LOCK_SECONDS) if count >= MAX_FAILS else (count, 0.0)
+    raise HTTPException(status_code=401, detail=msg)
+
+
+def _open_guest(request: Request, dev: str, name: str, role: str, now: float) -> str:
+    ua = request.headers.get("user-agent", "")[:300]
+    for t in [t for t, s in _sessions.items() if not _alive(s, now) or s.get("dev") == dev]:
+        _sessions.pop(t, None)
+    token = secrets.token_urlsafe(32)
+    _sessions[token] = {"id": "d" + secrets.token_hex(4), "created": now, "last": now,
+                        "expires": now + int(settings.session_hours * 3600), "name": name, "kind": _kind_of(ua),
+                        "ip": _client_ip(request), "ua": ua, "local": False, "status": "ok", "role": role,
+                        "dev": dev, "guest": True}
+    _save()
+    return token
+
+
+@router.get("/guest/code", dependencies=[Depends(require_auth)])
+def guest_code(request: Request, new: int = 0):
+    """Kode tamu yang sedang berlaku (hanya untuk laptop ini). new=1 membuat kode baru."""
+    _require_pc(request)
+    code, left = _guest_code(bool(new))
+    return {"code": code, "left": left}
+
+
+class PairIn(BaseModel):
+    code: str
+    name: str = ""
+    device: str = ""
+
+
+@router.post("/guest/pair")
+def guest_pair(body: PairIn, request: Request):
+    ip, now = _guest_gate(request)
+    dev = _devkey(body.device)
+    if not dev:
+        raise HTTPException(status_code=400, detail="Kode perangkat tamu kosong.")
+    code, left = _guest_code(False)
+    if not left or not secrets.compare_digest(body.code.strip().encode(), code.encode()):
+        _guest_fail(ip, now, "Kode tamu salah atau sudah habis. Minta kode baru di laptop host.")
+    _fails.pop(ip, None)
+    _guest["code"] = ""  # sekali pakai
+    name = clean_name(body.name) or "Laptop tamu"
+    secret = secrets.token_urlsafe(24)
+    token = _open_guest(request, dev, name, "send", now)  # hak awal: hanya kirim; host bisa menaikkan
+    _trusted[dev] = {"role": "send", "name": name, "approved": now, "guest": True, "secret": _sha(secret)}
+    _save_trust()
+    import socket
+    return {"ok": True, "token": token, "role": "send", "secret": secret, "host": socket.gethostname()}
+
+
+class ResumeIn(BaseModel):
+    device: str
+    secret: str
+
+
+@router.post("/guest/resume")
+def guest_resume(body: ResumeIn, request: Request):
+    """Tamu yang sudah dipercaya masuk lagi tanpa kode, selama host belum memutuskannya."""
+    ip, now = _guest_gate(request)
+    dev = _devkey(body.device)
+    t = _trusted.get(dev)
+    if not t or not t.get("guest") or not secrets.compare_digest(_sha(body.secret), t.get("secret", "")):
+        _guest_fail(ip, now, "Izin tamu sudah dicabut host. Minta kode tamu baru.")
+    _fails.pop(ip, None)
+    token = _open_guest(request, dev, t.get("name") or "Laptop tamu", t.get("role", "send"), now)
+    return {"ok": True, "token": token, "role": t.get("role", "send")}
 
 
 class PinIn(BaseModel):

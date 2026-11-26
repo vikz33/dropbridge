@@ -14,6 +14,7 @@ import time
 from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -85,6 +86,29 @@ def _peer(pid: str) -> dict:
     return p
 
 
+def _pcall(pid: str, method: str, path: str, **kw):
+    """Panggil laptop host dengan token tersimpan. Bila token kedaluwarsa dan kita tamu, masuk lagi otomatis."""
+    p = _peer(pid)
+    code, data = _call(p["url"], method, path, token=p["token"], **kw)
+    if code == 401 and p.get("secret"):
+        c2, d2 = _call(p["url"], "POST", "/api/guest/resume",
+                       body=json.dumps({"device": "pc-" + settings.pc_id, "secret": p["secret"]}).encode())
+        if c2 == 200 and d2.get("token"):
+            with _lock:
+                d = _load()
+                if pid in d:
+                    d[pid].update({"token": d2["token"], "role": d2.get("role", d[pid].get("role", "send")), "status": "ok"})
+                    _save(d)
+            code, data = _call(p["url"], method, path, token=d2["token"], **kw)
+        elif c2 == 401:
+            with _lock:  # host mencabut izin tamu: lupakan rahasianya
+                d = _load()
+                if pid in d:
+                    d[pid].update({"token": "", "secret": "", "status": "rejected"})
+                    _save(d)
+    return code, data
+
+
 def _refresh_urls(found: list[dict]) -> None:
     """Alamat laptop lain bisa berubah (DHCP): perbarui dari hasil pencarian terbaru."""
     with _lock:
@@ -112,7 +136,7 @@ def peers(fresh: int = 0):
         cur = out.get(pid, {"id": pid, "name": p.get("name", ""), "os": p.get("os", ""), "url": p.get("url", ""),
                             "version": p.get("version", ""), "here": False})
         cur.update({"paired": bool(p.get("token")) and p.get("status") == "ok", "status": p.get("status", ""),
-                    "role": p.get("role", "")})
+                    "role": p.get("role", ""), "guest": bool(p.get("secret"))})
         out[pid] = cur
     return {"peers": sorted(out.values(), key=lambda p: (not p.get("paired"), not p.get("here"), p.get("name", "")))}
 
@@ -149,6 +173,89 @@ def login(body: LoginIn):
     return {"id": pid, "status": d[pid]["status"], "role": d[pid]["role"]}
 
 
+class PairIn(BaseModel):
+    id: str = ""
+    url: str
+    code: str
+    name: str = ""
+    os: str = ""
+
+
+@router.post("/pair")
+def pair(body: PairIn):
+    """Jadi tamu di laptop lain: tukar kode tamu 6 angka (dari layar host) dengan izin yang bisa dipakai lagi."""
+    url = body.url.rstrip("/")
+    if not url.startswith("http"):
+        url = "http://" + url
+    me = {"code": body.code.strip(), "name": socket.gethostname(), "device": "pc-" + settings.pc_id}
+    code, data = _call(url, "POST", "/api/guest/pair", body=json.dumps(me).encode())
+    if code in (401, 429, 503):
+        raise HTTPException(status_code=code, detail=data.get("detail") or "Kode tamu ditolak.")
+    if code != 200 or not data.get("token"):
+        raise HTTPException(status_code=502, detail=data.get("detail") or f"Laptop host menjawab {code}.")
+    pid = body.id or url
+    with _lock:
+        d = _load()
+        d[pid] = {"id": pid, "url": url, "name": body.name or data.get("host") or urlsplit(url).hostname, "os": body.os,
+                  "token": data["token"], "secret": data["secret"], "status": "ok",
+                  "role": data.get("role", "send"), "since": time.time()}
+        _save(d)
+    return {"id": pid, "status": "ok", "role": d[pid]["role"]}
+
+
+@router.get("/files")
+def files(id: str, folder: str = ""):
+    """Isi folder di laptop host (perlu hak Lihat)."""
+    code, data = _pcall(id, "GET", f"/api/files?folder={quote(folder)}")
+    if code >= 400:
+        raise HTTPException(status_code=code if code in (401, 403, 404) else 502, detail=data.get("detail") or f"Laptop host menjawab {code}.")
+    return data
+
+
+@router.get("/download")
+def download(id: str, name: str, folder: str = ""):
+    """Unduh file dari laptop host lewat laptop ini (perlu hak Unduh)."""
+    p = _peer(id)
+    u = urlsplit(p["url"])
+    path = f"/api/files/{quote(name)}?folder={quote(folder)}"
+
+    def open_conn(token):
+        conn = http.client.HTTPConnection(u.hostname, u.port or 8000, timeout=30)
+        try:
+            conn.request("GET", path, headers={"User-Agent": UA, "Authorization": f"Bearer {token}"})
+            return conn, conn.getresponse()
+        except (OSError, http.client.HTTPException) as e:
+            conn.close()
+            raise HTTPException(status_code=502, detail=f"Laptop host tidak terjangkau ({e.__class__.__name__}).")
+
+    conn, r = open_conn(p["token"])
+    if r.status == 401 and p.get("secret"):
+        conn.close()
+        _pcall(id, "GET", "/api/session")  # memperbarui token lewat resume
+        conn, r = open_conn(_peer(id)["token"])
+    if r.status != 200:
+        raw = r.read()
+        conn.close()
+        try:
+            detail = json.loads(raw.decode("utf-8") or "{}").get("detail")
+        except ValueError:
+            detail = ""
+        raise HTTPException(status_code=r.status if r.status in (401, 403, 404) else 502, detail=detail or f"Laptop host menjawab {r.status}.")
+
+    def gen():
+        try:
+            while True:
+                chunk = r.read(1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            conn.close()
+
+    headers = {k: v for k in ("Content-Disposition", "Content-Length") if (v := r.getheader(k))}
+    return StreamingResponse(gen(), media_type=r.getheader("Content-Type") or "application/octet-stream", headers=headers)
+
+
 @router.get("/status")
 def status(id: str):
     """Sudah diizinkan? (dipanggil berulang saat menunggu izin di laptop tujuan)"""
@@ -157,7 +264,7 @@ def status(id: str):
         p = d.get(id)
     if not p or not p.get("token"):
         return {"status": "none"}
-    code, data = _call(p["url"], "GET", "/api/session", token=p["token"])
+    code, data = _pcall(id, "GET", "/api/session")
     if code == 401:
         st, wait, role = "rejected", 0, ""
     elif code == 200:
@@ -192,8 +299,7 @@ def forget(pid: str):
 @router.get("/folders")
 def folders(id: str):
     """Daftar folder di laptop tujuan (untuk saran dan Pilih folder)."""
-    p = _peer(id)
-    code, data = _call(p["url"], "GET", "/api/folders", token=p["token"])
+    code, data = _pcall(id, "GET", "/api/folders")
     if code == 401:
         raise HTTPException(status_code=401, detail="Sambungan ke laptop tujuan berakhir. Sambungkan lagi.")
     if code != 200:

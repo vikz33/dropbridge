@@ -134,6 +134,25 @@ def set_notify(body: NotifyIn):
     return {"ok": True, "notify": body.on}
 
 
+class ModeIn(BaseModel):
+    mode: str
+
+
+@router.get("/mode", dependencies=[Depends(_pc_only)])
+def get_mode():
+    return {"mode": settings.mode}
+
+
+@router.post("/mode", dependencies=[Depends(_pc_only)])
+def set_mode(body: ModeIn):
+    """Ganti peran laptop ini. Jadi tamu: perangkat lain tidak bisa masuk dan laptop ini tidak menjawab pencarian."""
+    if body.mode not in ("host", "guest"):
+        raise HTTPException(status_code=400, detail="Mode tidak dikenal.")
+    save_setting("mode", body.mode)
+    settings.mode = body.mode
+    return {"ok": True, "mode": settings.mode}
+
+
 # ---------- Jendela desktop ----------
 @router.post("/desktop/show")
 def desktop_show(request: Request, path: str = ""):

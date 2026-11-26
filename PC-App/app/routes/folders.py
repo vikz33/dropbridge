@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..auth import require_auth, require_full
+from ..auth import require_auth, require_full, require_get
 from ..services.storage import StorageError, storage, trash_label
 
 router = APIRouter(prefix="/api/folders", dependencies=[Depends(require_auth)])
@@ -47,7 +47,7 @@ def delete_folder(name: str, expect: Optional[int] = None):
     return {"ok": True, "deleted": deleted, "trash": trash_label()}
 
 
-@router.get("/{name:path}/zip", dependencies=[Depends(require_full)])
+@router.get("/{name:path}/zip", dependencies=[Depends(require_get)])
 def zip_folder(name: str):
     filename, chunks = storage.zip_stream(name)
     return StreamingResponse(
