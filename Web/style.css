@@ -746,8 +746,16 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
 .pend-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 40%, transparent); flex-wrap: wrap; }
 .pend-card .ball { box-shadow: none; animation: none; }
 .add-card .cap, .legend-card .cap { display: block; }
+.add-card { display: grid; gap: 12px; }
+.add-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.add-tabs button { min-height: 44px; }
+.tab-off { display: none !important; }
+.pin-row { margin-top: 10px; }
+.pin-box { display: grid; gap: 2px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.pin-box .code { font-size: 24px; letter-spacing: .12em; }
 .legend-card { padding: 14px 16px; display: grid; gap: 10px; }
 .legend-card p { margin: 0; }
+.legend-card[hidden] { display: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .legend span { display: inline-flex; align-items: center; gap: 7px; }
 .lgd { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }

@@ -276,6 +276,8 @@
   function renderRemote() {
     const has = remoteUrls.length > 0;
     $('#remoteCard').hidden = !has && !isOnPc;
+    $('#tabLuar').hidden = $('#remoteCard').hidden;
+    setAddTab(addTab);
     $('#remoteOn').hidden = !has;
     $('#remoteOff').hidden = has;
     if (!has) return;
@@ -1580,6 +1582,8 @@
   function renderApk() {
     const isAndroidPhone = /Android/i.test(navigator.userAgent) && !isOnPc;
     $('#apkCard').hidden = !android.available || (!isOnPc && !isAndroidPhone);
+    $('#tabApk').hidden = $('#apkCard').hidden;
+    setAddTab(addTab);
     $('#apkTag').textContent = android.version || '';
     for (const box of $$('[data-apk]')) {
       box.replaceChildren();
@@ -1983,7 +1987,8 @@
       myName = s.name || '';
       myLocal = !!s.local;
       applyRole(s.role);
-      if (s.pin) $('#pinNow').textContent = s.pin.replace(/^(\d{3})(\d{3})$/, '$1 $2');
+      if (s.pin) { $('#pinNow').textContent = s.pin.replace(/^(\d{3})(\d{3})$/, '$1 $2'); $('#pinHub').textContent = $('#pinNow').textContent; }
+      $('#pinRow').hidden = !(myLocal && s.pin);
       if (myLocal) startPendingWatch();
       renderSettings();
       $('#devOthers').hidden = !myLocal;
@@ -2091,7 +2096,7 @@
   let peersAt = 0;
   let hubSel = '';
   let hubSig = '';
-  let hubView = store.get('db_hubview') === 'list' ? 'list' : 'map';
+  let addTab = 'hp';
   const RING_T = [70, 110, 160, 200];
   const IC_PLANET = {
     lap: '<rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>',
@@ -2110,7 +2115,7 @@
       try { hubPeers = (await api('/api/peers' + (force ? '?fresh=1' : ''))).peers || []; } catch { /* lama: tanpa laptop lain */ }
     }
     renderHub();
-    if (hubView === 'list') renderDevices();
+    renderDevices();
   }
 
   function hubPlanets() {
@@ -2139,14 +2144,9 @@
       pend ? `${pend} menunggu izin` : '',
       hubPeers.length ? `${hubPeers.length} laptop lain di Wi-Fi ini` : '',
     ].filter(Boolean).join(' · ');
-    $('#hvMap').setAttribute('aria-pressed', String(hubView === 'map'));
-    $('#hvList').setAttribute('aria-pressed', String(hubView === 'list'));
-    $('#hubMap').hidden = hubView !== 'map';
-    $('#hubList').hidden = hubView !== 'list';
     renderPendingCards();
     if (hubSel && !planets.some((p) => p.id === hubSel) && hubSel !== 'sun') { hubSel = ''; }
     renderDetail(planets);
-    if (hubView !== 'map') return;
     const box = $('#hubMap');
     const W = box.clientWidth || 600;
     const H = Math.round(Math.min(W, window.innerWidth >= 960 ? 640 : W * 1.02));
@@ -2224,8 +2224,19 @@
   $('#planetClose').addEventListener('click', () => $('#planetDlg').close());
   $('#planetDlg').addEventListener('click', (e) => { if (e.target.id === 'planetDlg') e.target.close(); });
   $('#planetDlg').addEventListener('close', () => { hubSel = ''; hubSig = ''; if (route.type === 'more') renderHub(); });
-  $('#hvMap').addEventListener('click', () => { hubView = 'map'; store.set('db_hubview', 'map'); hubSig = ''; renderHub(); });
-  $('#hvList').addEventListener('click', () => { hubView = 'list'; store.set('db_hubview', 'list'); renderHub(); renderDevices(); });
+  $('#legendBtn').addEventListener('click', () => {
+    const c = $('#legendCard'); c.hidden = !c.hidden;
+    $('#legendBtn').setAttribute('aria-expanded', String(!c.hidden));
+  });
+  function setAddTab(t) {
+    const ok = { hp: true, luar: !$('#tabLuar').hidden, apk: !$('#tabApk').hidden };
+    addTab = ok[t] ? t : 'hp';
+    for (const b of $$('.add-tabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === addTab));
+    $('[data-pane="hp"]').hidden = addTab !== 'hp';
+    $('#remoteCard').classList.toggle('tab-off', addTab !== 'luar');
+    $('#apkCard').classList.toggle('tab-off', addTab !== 'apk');
+  }
+  for (const b of $$('.add-tabs button')) b.addEventListener('click', () => setAddTab(b.dataset.tab));
 
   async function changeRole(v) {
     const to = v.role === 'full' ? 'send' : 'full';
@@ -2375,6 +2386,7 @@
       const r = await api('/api/pin', { method: 'POST', headers: JSON_HEADERS, body: '{}' });
       toast('PIN baru: ' + r.pin);
       $('#pinNow').textContent = String(r.pin).replace(/^(\d{3})(\d{3})$/, '$1 $2');
+      $('#pinHub').textContent = $('#pinNow').textContent;
       renderAddr();
     } catch (err) { toast(err.message, 'err'); }
   });

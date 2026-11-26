@@ -196,15 +196,20 @@
     <main id="pageMore" class="page hub" hidden>
       <div class="hub-bar">
         <p id="hubSum" class="muted small"></p>
-        <div class="seg seg-text hub-view" role="group" aria-label="Tampilan perangkat">
-          <button type="button" id="hvMap" aria-pressed="true">Peta</button>
-          <button type="button" id="hvList" aria-pressed="false">Daftar</button>
-        </div>
+        <button type="button" id="legendBtn" class="btn ghost small" aria-expanded="false" aria-controls="legendCard">Arti tanda</button>
       </div>
       <div class="hub-grid">
         <div class="hub-main">
           <section id="hubMap" class="space" role="list" aria-label="Peta perangkat di sekitar"></section>
-          <section id="hubList" class="card more-card" hidden>
+          <section id="legendCard" class="card legend-card" hidden>
+            <div class="legend">
+              <span><i class="lgd lap"></i>Laptop</span><span><i class="lgd app"></i>Aplikasi Android</span><span><i class="lgd web"></i>Browser</span>
+              <span><i class="lgd pend"></i>Menunggu izin</span><span><i class="lgd ring"></i>Hanya kirim</span><span><i class="lgd ts"></i>Tailscale</span>
+            </div>
+            <p class="muted small">Orbit dalam = aktif sekarang · tengah = pernah tersambung · luar = menunggu izin atau laptop lain di Wi-Fi ini · putus-putus = lewat internet (Tailscale).</p>
+          </section>
+          <div id="hubPending" class="hub-pending"></div>
+          <section id="hubList" class="card more-card">
             <div class="dev-head">
               <h2>Perangkat</h2>
               <span class="dev-acts"><button id="devOthers" class="btn ghost small danger" type="button">Putuskan semua</button></span>
@@ -216,19 +221,20 @@
         </div>
         <aside class="hub-side">
           <section id="hubDetail" class="card hub-detail" hidden></section>
-          <div id="hubPending" class="hub-pending"></div>
           <section class="card qr-card add-card">
             <span class="cap">TAMBAH PERANGKAT</span>
-            <div class="addr" data-addr hidden></div>
-            <p id="qrOff" class="muted" hidden>Alamat laptop belum terdeteksi.</p>
-          </section>
-          <section class="card legend-card">
-            <span class="cap">ARTI TANDA</span>
-            <div class="legend">
-              <span><i class="lgd lap"></i>Laptop</span><span><i class="lgd app"></i>Aplikasi Android</span><span><i class="lgd web"></i>Browser</span>
-              <span><i class="lgd pend"></i>Menunggu izin</span><span><i class="lgd ring"></i>Hanya kirim</span><span><i class="lgd ts"></i>Tailscale</span>
+            <div class="seg seg-text add-tabs" role="group" aria-label="Cara menambah perangkat">
+              <button type="button" data-tab="hp" aria-pressed="true">HP baru</button>
+              <button type="button" data-tab="luar" id="tabLuar" aria-pressed="false" hidden>Dari luar jaringan</button>
+              <button type="button" data-tab="apk" id="tabApk" aria-pressed="false" hidden>Aplikasi Android</button>
             </div>
-            <p class="muted small">Orbit dalam = aktif sekarang · tengah = pernah tersambung · luar = menunggu izin atau laptop lain di Wi-Fi ini · putus-putus = lewat internet (Tailscale).</p>
+            <div data-pane="hp">
+              <div class="addr" data-addr hidden></div>
+              <p id="qrOff" class="muted" hidden>Alamat laptop belum terdeteksi.</p>
+              <div class="pin-row" id="pinRow" hidden>
+                <div class="pin-box"><span class="cap">PIN LAPTOP INI</span><b id="pinHub" class="code"></b><small class="muted">Untuk HP masuk</small></div>
+              </div>
+            </div>
           </section>
         <section class="card qr-card remote-card" id="remoteCard" hidden>
           <h2>Dari luar jaringan <span class="tag">Tailscale</span></h2>
