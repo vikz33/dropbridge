@@ -196,7 +196,10 @@
     <main id="pageMore" class="page hub" hidden>
       <div class="hub-bar">
         <p id="hubSum" class="muted small"></p>
-        <button type="button" id="legendBtn" class="btn ghost small" aria-expanded="false" aria-controls="legendCard">Arti tanda</button>
+        <span class="hub-acts">
+          <button type="button" id="modeBtn" class="btn ghost small mode-chip" aria-haspopup="dialog">Mode: Host <span aria-hidden="true">▾</span></button>
+          <button type="button" id="legendBtn" class="btn ghost small" aria-expanded="false" aria-controls="legendCard">Arti tanda</button>
+        </span>
       </div>
       <div class="hub-grid">
         <div class="hub-main">
@@ -325,6 +328,15 @@
 
   <dialog id="planetDlg" class="sheet planet-dlg" aria-label="Detail perangkat">
     <div class="dlg-body"><div class="sheet-head"><h3 id="planetTitle">Perangkat</h3><button id="planetClose" class="linkbtn" type="button">Tutup</button></div><div id="planetBody"></div></div>
+  </dialog>
+
+  <dialog id="modeDlg" class="sheet planet-dlg" aria-label="Pilih mode laptop">
+    <div class="dlg-body"><div class="sheet-head"><h3>Mode laptop ini</h3><button id="modeClose" class="linkbtn" type="button">Tutup</button></div>
+      <div class="mode-opts">
+        <div class="mode-opt on"><b>Host <span class="tag">Aktif</span></b><small class="muted">Laptop ini jadi pusat. HP dan laptop lain mengirim ke sini.</small></div>
+        <div class="mode-opt off"><b>Tamu <span class="tag">Segera</span></b><small class="muted">Laptop ini mengintip dan mengirim ke laptop host yang memberi izin. Tersedia di versi 3.4.0.</small></div>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="nameDlg" class="small-dlg">

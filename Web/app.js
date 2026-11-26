@@ -2149,7 +2149,7 @@
     renderDetail(planets);
     const box = $('#hubMap');
     const W = box.clientWidth || 600;
-    const H = Math.round(Math.min(W, window.innerWidth >= 960 ? 640 : W * 1.02));
+    const H = Math.round(Math.min(W, window.innerWidth >= 960 ? 440 : W * 1.02));
     const sig = JSON.stringify([W, H, hubSel, planets.map((p) => [p.id, p.ring, p.name, p.sub.replace(/\d+:\d+/, ''), p.ringRole, p.dim, p.kind]), pcInfo.name]);
     if (sig === hubSig) {
       // Hanya hitung mundur izin yang berubah: perbarui teksnya tanpa menggambar ulang (animasi tidak terulang)
@@ -2224,6 +2224,9 @@
   $('#planetClose').addEventListener('click', () => $('#planetDlg').close());
   $('#planetDlg').addEventListener('click', (e) => { if (e.target.id === 'planetDlg') e.target.close(); });
   $('#planetDlg').addEventListener('close', () => { hubSel = ''; hubSig = ''; if (route.type === 'more') renderHub(); });
+  $('#modeBtn').addEventListener('click', () => $('#modeDlg').showModal());
+  $('#modeClose').addEventListener('click', () => $('#modeDlg').close());
+  $('#modeDlg').addEventListener('click', (e) => { if (e.target.id === 'modeDlg') e.target.close(); });
   $('#legendBtn').addEventListener('click', () => {
     const c = $('#legendCard'); c.hidden = !c.hidden;
     $('#legendBtn').setAttribute('aria-expanded', String(!c.hidden));
